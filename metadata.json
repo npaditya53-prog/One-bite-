@@ -1,0 +1,6 @@
+{
+  "name": "One Bite Motihari",
+  "description": "Official website for One Bite restaurant in Motihari, Bihar. Discover delicious burgers, pizzas, sandwiches, wraps, shakes, location at Bagaha Dhala Road, opening hours, and direct ordering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

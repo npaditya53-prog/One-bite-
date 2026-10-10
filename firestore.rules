@@ -1,0 +1,163 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Security Primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'npaditya53@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Connection testing doc
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() && isValidId(adminId);
+    }
+
+    // Site Settings
+    function isValidSetting(data) {
+      return data.restaurantName is string && data.restaurantName.size() <= 150 &&
+             data.phone is string && data.phone.size() <= 30 &&
+             data.whatsapp is string && data.whatsapp.size() <= 30 &&
+             data.address is string && data.address.size() <= 300;
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(settingId) && isValidSetting(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Menu Categories
+    function isValidCategory(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 100 &&
+             data.displayOrder is number &&
+             data.active is bool;
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
+      allow update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
+      allow delete: if isAdmin() && isValidId(categoryId);
+    }
+
+    // Menu Items
+    function isValidMenuItem(data) {
+      return data.categoryId is string && data.categoryId.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
+             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 150 &&
+             data.foodType is string && (data.foodType == 'veg' || data.foodType == 'non_veg') &&
+             data.available is bool;
+    }
+
+    match /menuItems/{menuItemId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(menuItemId) && isValidMenuItem(incoming());
+      allow update: if isAdmin() && isValidId(menuItemId) && isValidMenuItem(incoming());
+      allow delete: if isAdmin() && isValidId(menuItemId);
+    }
+
+    // Orders
+    function isValidOrder(data) {
+      return data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100 &&
+             data.customerPhone is string && data.customerPhone.size() > 0 && data.customerPhone.size() <= 30 &&
+             data.orderType is string && (data.orderType == 'takeaway' || data.orderType == 'delivery' || data.orderType == 'dine_in') &&
+             data.totalAmount is number && data.totalAmount >= 0 &&
+             data.status is string && (data.status == 'pending' || data.status == 'confirmed' || data.status == 'preparing' || data.status == 'completed' || data.status == 'cancelled') &&
+             data.createdAt is string && data.createdAt.size() <= 100;
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAdmin();
+      allow create: if isValidId(orderId) && isValidOrder(incoming()) && incoming().status == 'pending';
+      allow update: if isAdmin() && isValidId(orderId) && isValidOrder(incoming());
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // Gallery
+    function isValidGallery(data) {
+      return data.imageUrl is string && data.imageUrl.size() <= 1000 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.caption is string && data.caption.size() <= 300 &&
+             data.displayOrder is number;
+    }
+
+    match /gallery/{galleryId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(galleryId) && isValidGallery(incoming());
+      allow update: if isAdmin() && isValidId(galleryId) && isValidGallery(incoming());
+      allow delete: if isAdmin() && isValidId(galleryId);
+    }
+
+    // Reviews
+    function isValidReview(data) {
+      return data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100 &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.reviewText is string && data.reviewText.size() > 0 && data.reviewText.size() <= 1000;
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isValidId(reviewId) && isValidReview(incoming());
+      allow update: if isAdmin() && isValidId(reviewId) && isValidReview(incoming());
+      allow delete: if isAdmin() && isValidId(reviewId);
+    }
+
+    // Offers
+    function isValidOffer(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.discount is string && data.discount.size() <= 100 &&
+             data.active is bool;
+    }
+
+    match /offers/{offerId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(offerId) && isValidOffer(incoming());
+      allow update: if isAdmin() && isValidId(offerId) && isValidOffer(incoming());
+      allow delete: if isAdmin() && isValidId(offerId);
+    }
+
+    // Business Hours
+    function isValidBusinessHour(data) {
+      return data.day is string && data.day.size() <= 50 &&
+             data.isClosed is bool;
+    }
+
+    match /businessHours/{dayId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidId(dayId) && isValidBusinessHour(incoming());
+      allow delete: if isAdmin() && isValidId(dayId);
+    }
+  }
+}

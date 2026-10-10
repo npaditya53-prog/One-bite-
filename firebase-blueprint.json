@@ -1,0 +1,211 @@
+{
+  "entities": {
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "General restaurant branding, contact, and section display settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "restaurantName": { "type": "string", "maxLength": 150 },
+        "tagline": { "type": "string", "maxLength": 250 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "logoUrl": { "type": "string", "maxLength": 1000 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "whatsapp": { "type": "string", "maxLength": 30 },
+        "email": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 300 },
+        "city": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 100 },
+        "pincode": { "type": "string", "maxLength": 20 },
+        "mapsUrl": { "type": "string", "maxLength": 1000 },
+        "mapsEmbedUrl": { "type": "string", "maxLength": 1000 },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "orderUrl": { "type": "string", "maxLength": 1000 },
+        "orderingPlatformName": { "type": "string", "maxLength": 100 },
+        "instagramUrl": { "type": "string", "maxLength": 1000 },
+        "facebookUrl": { "type": "string", "maxLength": 1000 },
+        "youtubeUrl": { "type": "string", "maxLength": 1000 },
+        "heroHeading": { "type": "string", "maxLength": 200 },
+        "heroSubheading": { "type": "string", "maxLength": 300 },
+        "heroImageUrl": { "type": "string", "maxLength": 1000 },
+        "heroCtaText": { "type": "string", "maxLength": 100 },
+        "aboutHeading": { "type": "string", "maxLength": 200 },
+        "aboutDescription": { "type": "string", "maxLength": 3000 },
+        "aboutImageUrl": { "type": "string", "maxLength": 1000 },
+        "aboutEstablishedYear": { "type": "string", "maxLength": 20 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["restaurantName", "phone", "whatsapp", "address"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Food menu categories such as Burger, Pizza, Potato Tornado",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "slug": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "displayOrder": { "type": "number" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["name", "slug", "displayOrder", "active"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Specific menu food items with price, variants, and veg/non-veg flags",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "slug": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "foodType": { "type": "string", "enum": ["veg", "non_veg"] },
+        "popular": { "type": "boolean" },
+        "available": { "type": "boolean" },
+        "ingredients": { "type": "string", "maxLength": 500 },
+        "servingInfo": { "type": "string", "maxLength": 200 },
+        "displayOrder": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["categoryId", "name", "slug", "foodType", "available"]
+    },
+    "CustomerOrder": {
+      "title": "CustomerOrder",
+      "description": "Orders placed by customers for dine-in, takeaway, or delivery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "orderType": { "type": "string", "enum": ["takeaway", "delivery", "dine_in"] },
+        "deliveryAddress": { "type": "string", "maxLength": 500 },
+        "tableNumber": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "subtotal": { "type": "number" },
+        "addonsTotal": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "preparing", "completed", "cancelled"] },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["customerName", "customerPhone", "orderType", "totalAmount", "status", "createdAt"]
+    },
+    "GalleryItem": {
+      "title": "GalleryItem",
+      "description": "Photos of food and restaurant ambience",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "enum": ["Food", "Interior", "Exterior", "Ambience", "Other"] },
+        "caption": { "type": "string", "maxLength": 300 },
+        "displayOrder": { "type": "number" },
+        "featured": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["imageUrl", "category", "caption", "displayOrder"]
+    },
+    "ReviewItem": {
+      "title": "ReviewItem",
+      "description": "Verified guest reviews and ratings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "rating": { "type": "number" },
+        "reviewText": { "type": "string", "maxLength": 1000 },
+        "reviewDate": { "type": "string", "maxLength": 100 },
+        "featured": { "type": "boolean" },
+        "source": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["customerName", "rating", "reviewText", "featured"]
+    },
+    "OfferItem": {
+      "title": "OfferItem",
+      "description": "Promotional deals and coupons",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 500 },
+        "discount": { "type": "string", "maxLength": 100 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "code": { "type": "string", "maxLength": 50 },
+        "startDate": { "type": "string", "maxLength": 100 },
+        "endDate": { "type": "string", "maxLength": 100 },
+        "active": { "type": "boolean" }
+      },
+      "required": ["title", "description", "discount", "active"]
+    },
+    "BusinessHours": {
+      "title": "BusinessHours",
+      "description": "Operating schedule for days of the week",
+      "type": "object",
+      "properties": {
+        "day": { "type": "string", "maxLength": 50 },
+        "openTime": { "type": "string", "maxLength": 20 },
+        "closeTime": { "type": "string", "maxLength": 20 },
+        "isClosed": { "type": "boolean" }
+      },
+      "required": ["day", "isClosed"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Registered restaurant administrators",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SiteSettings" },
+      "description": "Restaurant configuration and branding data"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Menu categories"
+    },
+    "/menuItems/{menuItemId}": {
+      "schema": { "$ref": "#/entities/MenuItem" },
+      "description": "Menu items"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/CustomerOrder" },
+      "description": "Customer food orders"
+    },
+    "/gallery/{galleryId}": {
+      "schema": { "$ref": "#/entities/GalleryItem" },
+      "description": "Restaurant gallery photos"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/ReviewItem" },
+      "description": "Customer testimonials"
+    },
+    "/offers/{offerId}": {
+      "schema": { "$ref": "#/entities/OfferItem" },
+      "description": "Deals and promotions"
+    },
+    "/businessHours/{dayId}": {
+      "schema": { "$ref": "#/entities/BusinessHours" },
+      "description": "Weekly operating hours"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized administrators"
+    }
+  }
+}
