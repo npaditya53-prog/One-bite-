@@ -409,22 +409,53 @@ app.get('/api/offers', (_req, res) => {
 });
 
 app.post('/api/offers', requireAdmin, (req, res) => {
-  const { title, description, discount, imageUrl, code, startDate, endDate, active } = req.body;
+  const {
+    title,
+    description,
+    discount,
+    offerType,
+    discountValue,
+    targetType,
+    targetCategoryIds,
+    targetItemIds,
+    imageUrl,
+    code,
+    startDate,
+    endDate,
+    terms,
+    isPublic,
+    status,
+    active,
+    minOrderValue,
+  } = req.body;
+
   if (!title || !description) {
     return res.status(400).json({ error: 'Title and description are required' });
   }
+
   const newOffer = {
     id: 'off_' + Date.now(),
     title: title.trim(),
     description: description.trim(),
-    discount: discount || '',
+    offerType: offerType || 'percentage',
+    discountValue: discountValue !== undefined && discountValue !== '' ? Number(discountValue) : undefined,
+    discount: discount || (discountValue ? `${discountValue}% OFF` : 'Special Offer'),
+    targetType: targetType || 'all',
+    targetCategoryIds: Array.isArray(targetCategoryIds) ? targetCategoryIds : [],
+    targetItemIds: Array.isArray(targetItemIds) ? targetItemIds : [],
     imageUrl: imageUrl || '',
-    code: code || '',
+    code: code ? code.trim().toUpperCase() : '',
     startDate: startDate || '',
     endDate: endDate || '',
+    terms: terms || '',
+    isPublic: isPublic !== undefined ? Boolean(isPublic) : true,
+    status: status || 'active',
     active: active !== undefined ? Boolean(active) : true,
+    minOrderValue: minOrderValue !== undefined && minOrderValue !== '' ? Number(minOrderValue) : undefined,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
+
   database.offers.push(newOffer);
   saveDatabase(database);
   res.status(201).json(newOffer);
@@ -439,6 +470,7 @@ app.put('/api/offers/:id', requireAdmin, (req, res) => {
   database.offers[idx] = {
     ...database.offers[idx],
     ...req.body,
+    updatedAt: new Date().toISOString(),
   };
   saveDatabase(database);
   res.json(database.offers[idx]);

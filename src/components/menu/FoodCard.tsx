@@ -4,6 +4,7 @@ import { FoodTypeBadge } from '../common/FoodTypeBadge.tsx';
 import { Flame, Eye, Plus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { useToast } from '../common/Toast.tsx';
+import { getBestOfferForItem } from '../../utils/offerUtils.ts';
 
 interface FoodCardProps {
   item: MenuItem;
@@ -11,10 +12,15 @@ interface FoodCardProps {
 }
 
 export function FoodCard({ item, onSelect }: FoodCardProps) {
-  const { addToCart, setIsCartOpen } = useRestaurant();
+  const { addToCart, setIsCartOpen, activeOffers } = useRestaurant();
   const { showToast } = useToast();
 
   const hasVariants = Boolean(item.variants && item.variants.length > 0);
+
+  // Dynamic Offer check
+  const bestOffer = React.useMemo(() => {
+    return getBestOfferForItem(item, activeOffers);
+  }, [item, activeOffers]);
 
   // Price calculations
   let minVariantPrice = 0;
@@ -26,8 +32,12 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
   }
 
   const isMRP = item.price === 'MRP';
-  const currentPrice = item.discountPrice ?? item.price;
-  const originalPrice = item.discountPrice ? item.price : null;
+  const effectiveCurrentPrice = bestOffer
+    ? bestOffer.discountedPrice
+    : (item.discountPrice ?? item.price);
+  const effectiveOriginalPrice = bestOffer
+    ? bestOffer.originalPrice
+    : (item.discountPrice ? item.price : null);
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -60,7 +70,7 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/60 via-transparent to-transparent pointer-events-none" />
 
         {/* Status Indicators */}
-        <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10">
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 z-10 flex-wrap">
           <span className="p-1.5 bg-white/95 backdrop-blur-xs rounded-md shadow-xs">
             <FoodTypeBadge type={item.foodType} />
           </span>
@@ -68,6 +78,15 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
           {item.popular && (
             <span className="bg-amber-600 text-white text-[11px] font-semibold tracking-wide uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs">
               <Flame className="w-3 h-3 fill-white" /> Popular
+            </span>
+          )}
+
+          {bestOffer && (
+            <span
+              className="bg-emerald-600 text-white text-[11px] font-extrabold tracking-wide uppercase px-2 py-0.5 rounded-md flex items-center gap-1 shadow-xs"
+              title={`Special Offer: ${bestOffer.offerTitle}`}
+            >
+              {bestOffer.discountBadge}
             </span>
           )}
         </div>
@@ -127,10 +146,10 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
                 <span className="text-base font-extrabold text-stone-950">MRP</span>
               ) : (
                 <>
-                  <span className="text-lg font-extrabold text-stone-950">₹{currentPrice}</span>
-                  {originalPrice && (
+                  <span className="text-lg font-extrabold text-stone-950">₹{effectiveCurrentPrice}</span>
+                  {effectiveOriginalPrice && (
                     <span className="text-xs text-stone-400 line-through font-medium ml-1">
-                      ₹{originalPrice}
+                      ₹{effectiveOriginalPrice}
                     </span>
                   )}
                 </>

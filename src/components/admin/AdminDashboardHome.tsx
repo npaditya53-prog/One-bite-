@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { Utensils, FolderTree, Image, Star, Tag, Clock, ArrowRight, Plus, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { isOfferPubliclyActive } from '../../utils/offerUtils.ts';
 
 interface AdminDashboardHomeProps {
   onNavigateTab: (tab: string) => void;
@@ -49,7 +50,7 @@ export function AdminDashboardHome({ onNavigateTab, onViewLiveSite }: AdminDashb
     },
     {
       label: 'Active Offers',
-      value: offers.filter(o => o.active).length,
+      value: offers.filter(o => isOfferPubliclyActive(o)).length,
       sub: `${offers.length} total deals created`,
       icon: Tag,
       color: 'bg-rose-100 text-rose-800',

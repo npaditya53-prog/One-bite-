@@ -122,6 +122,8 @@ export interface CustomerOrder {
   items: CartItem[];
   subtotal: number;
   addonsTotal: number;
+  discountAmount?: number;
+  appliedOfferTitle?: string;
   totalAmount: number;
   status: 'pending' | 'confirmed' | 'preparing' | 'completed' | 'cancelled';
   createdAt: string;
@@ -148,17 +150,31 @@ export interface ReviewItem {
   createdAt: string;
 }
 
+export type OfferType = 'percentage' | 'flat_amount' | 'fixed_price' | 'bogo' | 'custom';
+export type OfferTarget = 'all' | 'veg_only' | 'non_veg_only' | 'categories' | 'items';
+export type OfferStatus = 'active' | 'scheduled' | 'expired' | 'paused' | 'draft';
+
 export interface OfferItem {
   id: string;
   title: string;
   description: string;
-  discount: string;
+  offerType?: OfferType;
+  discountValue?: number; // e.g. 10 for 10%, 50 for ₹50
+  discount: string; // display badge, e.g. "10% OFF", "FLAT ₹50 OFF"
+  targetType?: OfferTarget;
+  targetCategoryIds?: string[]; // category IDs if targetType === 'categories'
+  targetItemIds?: string[]; // item IDs if targetType === 'items'
   imageUrl?: string;
   code?: string;
-  startDate?: string;
-  endDate?: string;
+  startDate?: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
+  endDate?: string; // YYYY-MM-DD or YYYY-MM-DDTHH:mm
+  terms?: string;
+  isPublic?: boolean;
+  status?: OfferStatus;
+  minOrderValue?: number;
   active: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface BusinessDayHours {

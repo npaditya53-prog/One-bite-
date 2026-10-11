@@ -131,7 +131,6 @@ function MainContent() {
         {currentView === 'home' && (
           <>
             {enabled.hero && <Hero onNavigateToMenu={() => navigateTo('menu')} />}
-            {enabled.quickActions && <QuickActions />}
             {enabled.offers && <OffersSection />}
             {enabled.popularItems && (
               <PopularPicks onViewAllMenu={() => navigateTo('menu')} />

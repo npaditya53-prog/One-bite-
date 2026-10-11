@@ -4,6 +4,7 @@ import { MenuItem, Category, MenuVariant, CartItemAddon } from '../../types/inde
 import { FoodTypeBadge } from '../common/FoodTypeBadge.tsx';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { useToast } from '../common/Toast.tsx';
+import { getBestOfferForItem } from '../../utils/offerUtils.ts';
 
 interface FoodDetailsModalProps {
   item: MenuItem | null;
@@ -17,7 +18,7 @@ const OFFICIAL_ADDONS: CartItemAddon[] = [
 ];
 
 export function FoodDetailsModal({ item, category, onClose }: FoodDetailsModalProps) {
-  const { settings, addToCart, setIsCartOpen } = useRestaurant();
+  const { settings, addToCart, setIsCartOpen, activeOffers } = useRestaurant();
   const { showToast } = useToast();
 
   const [selectedVariant, setSelectedVariant] = useState<MenuVariant | undefined>(undefined);
@@ -57,12 +58,18 @@ export function FoodDetailsModal({ item, category, onClose }: FoodDetailsModalPr
   const hasVariants = Boolean(item.variants && item.variants.length > 0);
   const isMRP = item.price === 'MRP';
 
+  const bestOffer = useMemo(() => {
+    return item ? getBestOfferForItem(item, activeOffers) : null;
+  }, [item, activeOffers]);
+
   // Base unit price
   let unitPrice = 0;
   if (selectedVariant) {
     unitPrice = selectedVariant.price === 'MRP' ? 20 : Number(selectedVariant.price);
   } else if (isMRP) {
     unitPrice = 20; // Default nominal MRP
+  } else if (bestOffer) {
+    unitPrice = bestOffer.discountedPrice;
   } else {
     unitPrice = item.discountPrice ?? Number(item.price);
   }
@@ -145,11 +152,18 @@ export function FoodDetailsModal({ item, category, onClose }: FoodDetailsModalPr
                 )}
               </div>
 
-              {!item.available && (
-                <span className="bg-rose-900/95 text-rose-100 text-xs px-3 py-1 rounded-lg font-bold uppercase tracking-wider">
-                  Currently Unavailable
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {bestOffer && (
+                  <span className="bg-emerald-600 text-white text-xs px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider shadow-xs">
+                    {bestOffer.discountBadge}
+                  </span>
+                )}
+                {!item.available && (
+                  <span className="bg-rose-900/95 text-rose-100 text-xs px-3 py-1 rounded-lg font-bold uppercase tracking-wider">
+                    Currently Unavailable
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -179,8 +193,10 @@ export function FoodDetailsModal({ item, category, onClose }: FoodDetailsModalPr
                 ) : (
                   <div>
                     <div className="text-2xl font-black text-amber-700">₹{unitPrice}</div>
-                    {item.discountPrice && (
-                      <div className="text-xs text-stone-400 line-through">₹{item.price}</div>
+                    {(bestOffer || item.discountPrice) && (
+                      <div className="text-xs text-stone-400 line-through">
+                        ₹{bestOffer ? bestOffer.originalPrice : item.price}
+                      </div>
                     )}
                   </div>
                 )}

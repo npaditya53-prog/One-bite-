@@ -2,10 +2,41 @@ import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { useToast } from '../common/Toast.tsx';
 import { FoodTypeBadge } from '../common/FoodTypeBadge.tsx';
-import { X, Trash2, Plus, Minus, ShoppingBag, MessageSquare, ArrowRight, UtensilsCrossed, Phone, User, MapPin } from 'lucide-react';
+import {
+  X,
+  Trash2,
+  Plus,
+  Minus,
+  ShoppingBag,
+  MessageSquare,
+  ArrowRight,
+  UtensilsCrossed,
+  Phone,
+  User,
+  MapPin,
+  Tag,
+  Sparkles,
+  Check,
+  Percent,
+} from 'lucide-react';
 
 export function CartDrawer() {
-  const { cart, isCartOpen, setIsCartOpen, updateCartQuantity, removeFromCart, clearCart, cartTotal, placeOrder, settings } = useRestaurant();
+  const {
+    cart,
+    isCartOpen,
+    setIsCartOpen,
+    updateCartQuantity,
+    removeFromCart,
+    clearCart,
+    cartTotal,
+    appliedOffer,
+    applyOffer,
+    removeOffer,
+    cartDiscount,
+    activeOffers,
+    placeOrder,
+    settings,
+  } = useRestaurant();
   const { showToast } = useToast();
 
   const [customerName, setCustomerName] = useState('');
@@ -14,7 +45,9 @@ export function CartDrawer() {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [tableNumber, setTableNumber] = useState('');
   const [notes, setNotes] = useState('');
+  const [couponCodeInput, setCouponCodeInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showOffersList, setShowOffersList] = useState(false);
 
   if (!isCartOpen) return null;
 
@@ -312,19 +345,139 @@ export function CartDrawer() {
                 />
               </div>
 
+              {/* Promo Code & Special Offers Box */}
+              <div className="bg-amber-500/10 p-3.5 rounded-2xl border border-amber-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-stone-900">
+                    <Tag className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Special Offer & Coupon</span>
+                  </div>
+                  {activeOffers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowOffersList(!showOffersList)}
+                      className="text-[11px] font-bold text-amber-700 hover:text-amber-800"
+                    >
+                      {showOffersList ? 'Hide Deals' : 'View Deals'}
+                    </button>
+                  )}
+                </div>
+
+                {appliedOffer ? (
+                  <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1 bg-emerald-600 text-white rounded-md">
+                        <Check className="w-3.5 h-3.5" />
+                      </span>
+                      <div>
+                        <span className="text-xs font-bold text-emerald-900 block">
+                          {appliedOffer.title} ({appliedOffer.discount})
+                        </span>
+                        <span className="text-[11px] text-emerald-700 font-semibold block">
+                          Saving ₹{cartDiscount.discountTotal} on eligible items
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        removeOffer();
+                        showToast('Offer removed.', 'info');
+                      }}
+                      className="text-xs font-bold text-rose-600 hover:text-rose-800 p-1"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter promo code (e.g. ONEBITE20)"
+                      value={couponCodeInput}
+                      onChange={e => setCouponCodeInput(e.target.value.toUpperCase())}
+                      className="flex-1 px-3 py-1.5 text-xs font-mono uppercase bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!couponCodeInput.trim()) {
+                          showToast('Please enter a coupon code', 'error');
+                          return;
+                        }
+                        const res = applyOffer(couponCodeInput);
+                        if (res.success) {
+                          showToast(res.message, 'success');
+                          setCouponCodeInput('');
+                        } else {
+                          showToast(res.message, 'error');
+                        }
+                      }}
+                      className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+
+                {/* Available Offers list dropdown */}
+                {showOffersList && !appliedOffer && activeOffers.length > 0 && (
+                  <div className="pt-2 border-t border-amber-200/50 space-y-1.5">
+                    <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
+                      Active Deals You Can Apply:
+                    </span>
+                    {activeOffers.map(offer => (
+                      <div
+                        key={offer.id}
+                        className="p-2 bg-white rounded-xl border border-stone-200 flex items-center justify-between text-xs"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <span className="font-bold text-stone-900 block truncate">{offer.title}</span>
+                          <span className="text-[11px] text-amber-700 font-semibold block">{offer.discount}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const res = applyOffer(offer);
+                            if (res.success) {
+                              showToast(res.message, 'success');
+                              setShowOffersList(false);
+                            } else {
+                              showToast(res.message, 'error');
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 text-[11px] font-bold rounded-lg shrink-0"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Order Bill Summary */}
               <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-1.5 text-xs text-stone-600">
                 <div className="flex justify-between">
                   <span>Items Subtotal</span>
                   <span className="font-semibold text-stone-900">₹{cartTotal}</span>
                 </div>
+                {appliedOffer && cartDiscount.discountTotal > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span className="flex items-center gap-1">
+                      <Percent className="w-3.5 h-3.5" />
+                      <span>Special Offer Discount ({appliedOffer.title})</span>
+                    </span>
+                    <span>-₹{cartDiscount.discountTotal}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Store Taxes & Packaging</span>
                   <span className="font-semibold text-emerald-700">FREE</span>
                 </div>
                 <div className="flex justify-between text-sm font-extrabold text-stone-950 pt-2 border-t border-stone-200">
                   <span>Total Amount</span>
-                  <span className="text-amber-700">₹{cartTotal}</span>
+                  <span className="text-amber-700">₹{cartDiscount.finalTotal}</span>
                 </div>
               </div>
 
@@ -335,7 +488,7 @@ export function CartDrawer() {
                 className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <MessageSquare className="w-4 h-4" />
-                <span>{isSubmitting ? 'Processing...' : `Confirm & Order on WhatsApp (₹${cartTotal})`}</span>
+                <span>{isSubmitting ? 'Processing...' : `Confirm & Order on WhatsApp (₹${cartDiscount.finalTotal})`}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 

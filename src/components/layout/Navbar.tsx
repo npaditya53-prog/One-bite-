@@ -110,20 +110,21 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
               </a>
             )}
 
-            {orderUrl && (
-              <a
-                href={orderUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-amber-950/40 transition-colors"
-              >
-                <ShoppingBag className="w-4 h-4" />
-                <span>Order Now</span>
-              </a>
-            )}
+            <a
+              href="/admin"
+              onClick={(e) => {
+                e.preventDefault();
+                handleLinkClick('admin');
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-amber-950/40 transition-colors cursor-pointer"
+              title="Admin Login & Management"
+            >
+              <Shield className="w-4 h-4 text-amber-200" />
+              <span>Admin Login</span>
+            </a>
           </div>
 
-          {/* Mobile Right Controls: Phone + Order + Hamburger */}
+          {/* Mobile Right Controls: Phone + Admin Login + Hamburger */}
           <div className="flex sm:hidden items-center gap-2">
             {settings.phone && (
               <a
@@ -135,16 +136,18 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
               </a>
             )}
 
-            {orderUrl && (
-              <a
-                href={orderUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold"
-              >
-                Order
-              </a>
-            )}
+            <a
+              href="/admin"
+              onClick={(e) => {
+                e.preventDefault();
+                handleLinkClick('admin');
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              title="Admin Login"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-200" />
+              <span>Admin</span>
+            </a>
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

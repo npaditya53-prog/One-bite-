@@ -25,7 +25,12 @@ import {
   OperationType,
   User,
 } from '../services/firebase.ts';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import {
+  isOfferPubliclyActive,
+  calculateCartDiscount,
+  CartDiscountResult,
+} from '../utils/offerUtils.ts';
 
 interface OpenStatus {
   isOpen: boolean;
@@ -56,6 +61,10 @@ interface RestaurantContextType {
   cart: CartItem[];
   cartCount: number;
   cartTotal: number;
+  appliedOffer: OfferItem | null;
+  applyOffer: (offerOrCode: OfferItem | string) => { success: boolean; message: string };
+  removeOffer: () => void;
+  cartDiscount: CartDiscountResult;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
   selectedVariantItem: MenuItem | null;
@@ -150,6 +159,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedVariantItem, setSelectedVariantItem] = useState<MenuItem | null>(null);
+  const [appliedOffer, setAppliedOffer] = useState<OfferItem | null>(null);
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -264,7 +274,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   }, [data.menuItems]);
 
   const activeOffers = useMemo(() => {
-    return data.offers.filter(offer => offer.active);
+    return data.offers.filter(offer => isOfferPubliclyActive(offer));
   }, [data.offers]);
 
   // Cart Calculations
@@ -278,6 +288,44 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       return sum + (item.unitPrice + addonsPrice) * item.quantity;
     }, 0);
   }, [cart]);
+
+  const cartDiscount = useMemo(() => {
+    return calculateCartDiscount(cart, appliedOffer, data.menuItems);
+  }, [cart, appliedOffer, data.menuItems]);
+
+  const applyOffer = useCallback(
+    (offerOrCode: OfferItem | string) => {
+      let targetOffer: OfferItem | undefined;
+      if (typeof offerOrCode === 'string') {
+        const query = offerOrCode.trim().toUpperCase();
+        targetOffer = data.offers.find(
+          o => isOfferPubliclyActive(o) && o.code && o.code.toUpperCase() === query
+        );
+        if (!targetOffer) {
+          return { success: false, message: `Invalid or expired coupon code "${offerOrCode}".` };
+        }
+      } else {
+        targetOffer = offerOrCode;
+      }
+
+      if (!isOfferPubliclyActive(targetOffer)) {
+        return { success: false, message: `Offer "${targetOffer.title}" is currently not active.` };
+      }
+
+      const check = calculateCartDiscount(cart, targetOffer, data.menuItems);
+      if (!check.isEligible) {
+        return { success: false, message: check.message || 'No items in your cart qualify for this offer.' };
+      }
+
+      setAppliedOffer(targetOffer);
+      return { success: true, message: `Offer "${targetOffer.title}" applied successfully!` };
+    },
+    [cart, data.offers, data.menuItems]
+  );
+
+  const removeOffer = useCallback(() => {
+    setAppliedOffer(null);
+  }, []);
 
   // Cart Actions
   const addToCart = useCallback(
@@ -374,7 +422,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       }, 0);
 
       const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-      const totalAmount = subtotal + addonsTotal;
+      const discountAmount = cartDiscount.discountTotal;
+      const netPayable = Math.max(0, subtotal + addonsTotal - discountAmount);
 
       // Create order via API
       let createdOrder: CustomerOrder;
@@ -389,7 +438,9 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
           items: cart,
           subtotal,
           addonsTotal,
-          totalAmount,
+          discountAmount: discountAmount > 0 ? discountAmount : undefined,
+          appliedOfferTitle: discountAmount > 0 && appliedOffer ? appliedOffer.title : undefined,
+          totalAmount: netPayable,
         });
         setOrders(prev => [createdOrder, ...prev]);
       } catch (err) {
@@ -405,7 +456,9 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
           items: cart,
           subtotal,
           addonsTotal,
-          totalAmount,
+          discountAmount: discountAmount > 0 ? discountAmount : undefined,
+          appliedOfferTitle: discountAmount > 0 && appliedOffer ? appliedOffer.title : undefined,
+          totalAmount: netPayable,
           status: 'pending',
           createdAt: new Date().toISOString(),
         };
@@ -450,13 +503,21 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         }
       });
 
-      msg += `\n*TOTAL AMOUNT: ₹${totalAmount}*\n`;
+      msg += `\n*Items Subtotal:* ₹${subtotal}\n`;
+      if (addonsTotal > 0) {
+        msg += `*Add-ons:* ₹${addonsTotal}\n`;
+      }
+      if (discountAmount > 0 && appliedOffer) {
+        msg += `*Offer Applied (${appliedOffer.title}):* -₹${discountAmount}\n`;
+      }
+      msg += `*TOTAL AMOUNT: ₹${netPayable}*\n`;
       msg += `\nPlease confirm my order. Thank you!`;
 
       const cleanPhone = (data.settings.whatsapp || '+917079755703').replace(/[^0-9]/g, '');
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
 
       clearCart();
+      setAppliedOffer(null);
       setIsCartOpen(false);
 
       return {
@@ -465,7 +526,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         order: createdOrder,
       };
     },
-    [cart, data.settings.whatsapp, clearCart]
+    [cart, data.settings.whatsapp, clearCart, cartDiscount, appliedOffer]
   );
 
   // Admin Actions
@@ -618,6 +679,13 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         : [saved, ...prev.offers];
       return { ...prev, offers };
     });
+
+    try {
+      await setDoc(doc(db, 'offers', saved.id), saved);
+    } catch (fsErr) {
+      console.warn('Firestore offer sync error (non-fatal):', fsErr);
+    }
+
     return saved;
   };
 
@@ -627,6 +695,12 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       ...prev,
       offers: prev.offers.filter(o => o.id !== id),
     }));
+
+    try {
+      await deleteDoc(doc(db, 'offers', id));
+    } catch (fsErr) {
+      console.warn('Firestore offer delete error (non-fatal):', fsErr);
+    }
   };
 
   const handleSaveBusinessHours = async (hours: BusinessDayHours[]) => {
@@ -669,6 +743,10 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         cart,
         cartCount,
         cartTotal,
+        appliedOffer,
+        applyOffer,
+        removeOffer,
+        cartDiscount,
         isCartOpen,
         setIsCartOpen,
         selectedVariantItem,
