@@ -10,16 +10,26 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const DATA_DIR = path.resolve(process.cwd(), 'data');
-const DATA_FILE = path.join(DATA_DIR, 'database.json');
-const UPLOADS_DIR = path.resolve(process.cwd(), 'public', 'uploads');
+const isVercel = Boolean(process.env.VERCEL);
+const DATA_DIR = isVercel ? '/tmp/data' : path.resolve(process.cwd(), 'data');
+const DATA_FILE = isVercel ? '/tmp/data/database.json' : path.join(DATA_DIR, 'database.json');
+const UPLOADS_DIR = isVercel ? '/tmp/uploads' : path.resolve(process.cwd(), 'public', 'uploads');
 
-// Ensure directories exist
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Ensure directories exist safely
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Could not create DATA_DIR:', e);
 }
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Could not create UPLOADS_DIR:', e);
 }
 
 // In-memory + persistent store
@@ -35,16 +45,38 @@ function loadDatabase(): DatabaseSchema {
         ...parsed,
         settings: { ...initialData.settings, ...(parsed.settings || {}) },
       };
+    } else if (isVercel) {
+      const repoDataFile = path.resolve(process.cwd(), 'data', 'database.json');
+      if (fs.existsSync(repoDataFile)) {
+        const raw = fs.readFileSync(repoDataFile, 'utf-8');
+        const parsed = JSON.parse(raw);
+        const merged = {
+          ...initialData,
+          ...parsed,
+          settings: { ...initialData.settings, ...(parsed.settings || {}) },
+        };
+        try {
+          if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+          fs.writeFileSync(DATA_FILE, JSON.stringify(merged, null, 2), 'utf-8');
+        } catch {}
+        return merged;
+      }
     }
   } catch (err) {
     console.error('Error reading database file, using initial data:', err);
   }
-  saveDatabase(initialData);
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    saveDatabase(initialData);
+  } catch {}
   return JSON.parse(JSON.stringify(initialData));
 }
 
 function saveDatabase(data: DatabaseSchema) {
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
     console.error('Error saving database file:', err);
@@ -610,7 +642,11 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+export default app;
+
+if (!process.env.VERCEL) {
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
