@@ -21,6 +21,18 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Lock background scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   const navLinks = [
     { label: 'Home', view: 'home' },
     { label: 'Menu', view: 'menu' },
