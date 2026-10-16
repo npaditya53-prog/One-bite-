@@ -15,11 +15,13 @@ import { ReviewsSection } from './components/home/ReviewsSection.tsx';
 import { ContactSection } from './components/home/ContactSection.tsx';
 import { Footer } from './components/layout/Footer.tsx';
 import { MobileStickyCta } from './components/layout/MobileStickyCta.tsx';
+import { CartDrawer } from './components/cart/CartDrawer.tsx';
 import { OneBiteLogo } from './components/common/OneBiteLogo.tsx';
 import { NotFoundPage } from './components/common/NotFoundPage.tsx';
 import { CheckoutPage } from './components/checkout/CheckoutPage.tsx';
 import { PrivacyPolicyPage } from './components/legal/PrivacyPolicyPage.tsx';
 import { TermsConditionsPage } from './components/legal/TermsConditionsPage.tsx';
+import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
 import { AlertCircle } from 'lucide-react';
 
 const AdminLayout = React.lazy(() =>
@@ -222,7 +224,7 @@ function MainContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-stone-50 text-stone-900 selection:bg-amber-600 selection:text-white">
+    <div className="min-h-screen w-full flex flex-col bg-stone-50 text-stone-900 selection:bg-amber-600 selection:text-white overflow-x-hidden">
       {/* Sticky Header */}
       <Navbar currentView={currentView} onNavigate={navigateTo} />
 
@@ -316,16 +318,21 @@ function MainContent() {
 
       {/* Mobile Bottom Sticky CTA */}
       <MobileStickyCta currentView={currentView} onNavigate={navigateTo} />
+
+      {/* Cart & Pay on Delivery Drawer */}
+      <CartDrawer />
     </div>
   );
 }
 
 export default function App() {
   return (
-    <ToastProvider>
-      <RestaurantProvider>
-        <MainContent />
-      </RestaurantProvider>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <RestaurantProvider>
+          <MainContent />
+        </RestaurantProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

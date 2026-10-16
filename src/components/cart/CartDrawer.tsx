@@ -298,7 +298,13 @@ export function CartDrawer() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setIsCartOpen(false)}
+                  onClick={() => {
+                    setIsCartOpen(false);
+                    const menuEl = document.getElementById('menu');
+                    if (menuEl) {
+                      menuEl.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
                   className="px-5 py-2.5 rounded-xl bg-amber-600 text-white font-bold text-xs sm:text-sm hover:bg-amber-700 transition-colors shadow-xs cursor-pointer"
                 >
                   Browse Menu

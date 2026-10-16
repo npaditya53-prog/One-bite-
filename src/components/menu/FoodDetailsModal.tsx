@@ -48,7 +48,7 @@ export function FoodDetailsModal({ item, category, onClose }: FoodDetailsModalPr
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [item, onClose]);

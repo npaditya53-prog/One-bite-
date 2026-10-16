@@ -9,7 +9,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ currentView, onNavigate }: NavbarProps) {
-  const { settings, openStatus, isAdmin } = useRestaurant();
+  const { settings, openStatus, isAdmin, cart, setIsCartOpen } = useRestaurant();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -123,22 +123,52 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
               </a>
             )}
 
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(true)}
+              className="relative inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs sm:text-sm font-bold shadow-sm transition-all cursor-pointer"
+              title="Open Cart & Checkout"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>Cart</span>
+              {cart.length > 0 && (
+                <span className="ml-1 bg-white text-stone-950 font-black text-[10px] px-1.5 py-0.2 rounded-full">
+                  {cart.length}
+                </span>
+              )}
+            </button>
+
             <a
               href="/admin"
               onClick={(e) => {
                 e.preventDefault();
                 handleLinkClick('admin');
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-amber-950/40 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs sm:text-sm font-semibold border border-stone-800 transition-colors cursor-pointer"
               title="Admin Login & Management"
             >
-              <Shield className="w-4 h-4 text-amber-200" />
-              <span>Admin Login</span>
+              <Shield className="w-4 h-4 text-amber-400" />
+              <span>Admin</span>
             </a>
           </div>
 
-          {/* Mobile & Tablet Right Controls (< 1024px): Phone + Admin Login + Hamburger */}
-          <div className="flex lg:hidden items-center gap-2">
+          {/* Mobile & Tablet Right Controls (< 1024px): Phone + Cart + Admin + Hamburger */}
+          <div className="flex lg:hidden items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsCartOpen(true)}
+              className="relative p-2 rounded-lg bg-amber-600 active:bg-amber-700 text-white shadow-xs cursor-pointer"
+              aria-label="Open Cart"
+              title="Cart & Checkout"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              {cart.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-white text-stone-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                  {cart.length}
+                </span>
+              )}
+            </button>
+
             {settings.phone && (
               <a
                 href={`tel:${settings.phone.replace(/[^0-9+]/g, '')}`}
@@ -149,19 +179,6 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
                 <Phone className="w-4 h-4" />
               </a>
             )}
-
-            <a
-              href="/admin"
-              onClick={(e) => {
-                e.preventDefault();
-                handleLinkClick('admin');
-              }}
-              className="px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              title="Admin Login"
-            >
-              <Shield className="w-3.5 h-3.5 text-amber-200" />
-              <span>Admin</span>
-            </a>
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
