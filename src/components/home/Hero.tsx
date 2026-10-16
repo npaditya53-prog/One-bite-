@@ -45,7 +45,7 @@ export function Hero({ onNavigateToMenu }: HeroProps) {
           {/* Left Column: Branch Title & CTA */}
           <div className="lg:col-span-7 max-w-2xl">
             {/* Status Indicator & Location kicker */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-stone-900/90 border border-stone-800 text-xs mb-6 shadow-xs">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-stone-900/90 border border-stone-800 text-xs mb-6 shadow-xs">
               <span
                 className={`w-2 h-2 rounded-full ${
                   openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
@@ -68,9 +68,9 @@ export function Hero({ onNavigateToMenu }: HeroProps) {
               {settings.tagline}
             </p>
 
-            {/* Clean Description */}
+            {/* Clean Concrete Description */}
             <p className="text-sm sm:text-base text-stone-300 mb-8 leading-relaxed max-w-xl">
-              Craving juicy burgers, cheesy pizzas, refreshing shakes and crispy snacks? Visit One Bite Motihari on Bagaha Dhala Road, Rajendra Nagar or order directly from our menu.
+              Freshly grilled burgers, authentic cheese pizzas, crispy chicken buckets, potato tornados, and rich milkshakes prepared hot to order at our {settings.address} kitchen.
             </p>
 
             {/* Primary Action Buttons */}
@@ -112,11 +112,11 @@ export function Hero({ onNavigateToMenu }: HeroProps) {
             <div className="mt-10 pt-6 border-t border-stone-800/80 flex flex-wrap items-center gap-y-3 gap-x-6 text-xs text-stone-400">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-amber-500" />
-                <span>Daily 11:00 AM – 10:00 PM</span>
+                <span>Daily 11:00 AM to 10:00 PM</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-amber-500" />
-                <span>Bagaha Dhala Road, Rajendra Nagar</span>
+                <span>{settings.address}, Motihari</span>
               </div>
               {settings.phone && (
                 <a

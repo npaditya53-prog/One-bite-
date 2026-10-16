@@ -478,7 +478,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         dine_in: `Dine-In ${customer.tableNumber ? `(Table: ${customer.tableNumber})` : ''}`,
       }[customer.orderType];
 
-      let msg = `*NEW ORDER — ONE BITE MOTIHARI*\n`;
+      let msg = `*NEW ORDER - ONE BITE MOTIHARI*\n`;
       msg += `*Order ID:* ${createdOrder.id}\n`;
       msg += `*Customer:* ${customer.customerName}\n`;
       msg += `*Phone:* ${customer.customerPhone}\n`;
@@ -496,7 +496,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         if (item.variant) {
           msg += ` (${item.variant.name})`;
         }
-        msg += ` × ${item.quantity} — ₹${item.unitPrice * item.quantity}\n`;
+        msg += ` × ${item.quantity} : ₹${item.unitPrice * item.quantity}\n`;
         if (item.addons && item.addons.length > 0) {
           const addonsList = item.addons.map(a => `${a.name} (+₹${a.price})`).join(', ');
           msg += `   └ Add-ons: ${addonsList}\n`;
@@ -513,7 +513,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       msg += `*TOTAL AMOUNT: ₹${netPayable}*\n`;
       msg += `\nPlease confirm my order. Thank you!`;
 
-      const cleanPhone = (data.settings.whatsapp || '+917079755703').replace(/[^0-9]/g, '');
+      const cleanPhone = (data.settings.whatsapp || '+918210442538').replace(/[^0-9]/g, '');
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
 
       clearCart();

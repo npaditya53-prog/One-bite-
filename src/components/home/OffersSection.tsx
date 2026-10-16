@@ -49,7 +49,7 @@ export function OffersSection() {
     <section id="offers" className="py-14 bg-gradient-to-b from-amber-500/10 via-amber-500/5 to-transparent border-y border-amber-200/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col items-center mb-8 text-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-amber-100/80 text-amber-900 text-xs font-bold uppercase tracking-wider mb-2">
             <Sparkles className="w-4 h-4 text-amber-600" />
             <span>Exclusive Promotions</span>
           </div>

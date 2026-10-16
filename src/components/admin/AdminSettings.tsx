@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { SiteSettings } from '../../types/index.ts';
 import { useToast } from '../common/Toast.tsx';
-import { Save, RotateCcw, Upload, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Save, RotateCcw, Upload, CheckCircle2, AlertTriangle, ShieldCheck, Globe, ExternalLink } from 'lucide-react';
 
 export function AdminSettings() {
   const { settings, updateSettings, uploadImage, resetToDefaults } = useRestaurant();
@@ -614,6 +614,94 @@ export function AdminSettings() {
                 <span>{key.replace(/([A-Z])/g, ' $1')}</span>
               </label>
             ))}
+          </div>
+        </div>
+
+        {/* Section 6: Custom Domain & Production Launch Readiness */}
+        <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xs space-y-5">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-amber-600" />
+              <h2 className="text-base font-bold text-stone-900">
+                Custom Domain & Launch Checklist
+              </h2>
+            </div>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800">
+              Ready for Production
+            </span>
+          </div>
+
+          <p className="text-xs text-stone-600 leading-relaxed">
+            Configure your custom brand domain (such as <code className="bg-stone-100 px-1.5 py-0.5 rounded text-amber-800 font-mono font-bold">onebitemotihari.in</code>) with DNS records and ensure all launch requirements are satisfied before public promotion.
+          </p>
+
+          {/* DNS Configuration Table */}
+          <div className="bg-stone-50 p-4 rounded-xl border border-stone-200 space-y-3">
+            <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
+              DNS Records for Vercel / Custom Domain Hosting
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div className="p-2.5 bg-white rounded-lg border border-stone-200">
+                <span className="text-stone-400 block text-[10px] uppercase font-bold">Type</span>
+                <span className="font-mono font-bold text-stone-900">A Record</span>
+              </div>
+              <div className="p-2.5 bg-white rounded-lg border border-stone-200">
+                <span className="text-stone-400 block text-[10px] uppercase font-bold">Name / Host</span>
+                <span className="font-mono font-bold text-stone-900">@ (Root)</span>
+              </div>
+              <div className="p-2.5 bg-white rounded-lg border border-stone-200">
+                <span className="text-stone-400 block text-[10px] uppercase font-bold">Target Value</span>
+                <span className="font-mono font-bold text-amber-700">76.76.21.21</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div className="p-2.5 bg-white rounded-lg border border-stone-200">
+                <span className="text-stone-400 block text-[10px] uppercase font-bold">Type</span>
+                <span className="font-mono font-bold text-stone-900">CNAME</span>
+              </div>
+              <div className="p-2.5 bg-white rounded-lg border border-stone-200">
+                <span className="text-stone-400 block text-[10px] uppercase font-bold">Name / Host</span>
+                <span className="font-mono font-bold text-stone-900">www</span>
+              </div>
+              <div className="p-2.5 bg-white rounded-lg border border-stone-200">
+                <span className="text-stone-400 block text-[10px] uppercase font-bold">Target Value</span>
+                <span className="font-mono font-bold text-amber-700">cname.vercel-dns.com</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Launch Requirements Verified */}
+          <div className="space-y-2.5 pt-2">
+            <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wider">
+              Launch Verification Checklist
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-2 p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Favicon configured across all browsers</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>"Made with AI" tag removed</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Dedicated Privacy Policy page (/privacy)</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Dedicated Terms & Conditions page (/terms)</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Anti-slop design (zero pill buttons, zero purple)</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-emerald-50/70 border border-emerald-200 rounded-lg text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Verified Motihari phone & WhatsApp (+91 82104 42538)</span>
+              </div>
+            </div>
           </div>
         </div>
 

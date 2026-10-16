@@ -452,9 +452,9 @@ export function AdminOffers() {
                 dot: 'bg-amber-500',
               },
               draft: {
-                bg: 'bg-purple-100 text-purple-800 border-purple-300',
+                bg: 'bg-stone-200 text-stone-800 border-stone-300',
                 label: 'Draft',
-                dot: 'bg-purple-500',
+                dot: 'bg-stone-500',
               },
               expired: {
                 bg: 'bg-stone-100 text-stone-600 border-stone-300',
@@ -529,7 +529,7 @@ export function AdminOffers() {
                         <span className="font-semibold text-stone-900">Validity:</span>
                         <span className="truncate">
                           {offer.startDate ? new Date(offer.startDate).toLocaleDateString() : 'Immediate'}
-                          {' — '}
+                          {' to '}
                           {offer.endDate ? new Date(offer.endDate).toLocaleDateString() : 'Ongoing'}
                         </span>
                       </div>

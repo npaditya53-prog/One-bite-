@@ -119,7 +119,7 @@ export function AdminCategories() {
                   </td>
 
                   <td className="py-3.5 px-4 text-stone-500 max-w-xs truncate">
-                    {cat.description || '—'}
+                    {cat.description || '-'}
                   </td>
 
                   <td className="py-3.5 px-4 font-semibold text-stone-700">

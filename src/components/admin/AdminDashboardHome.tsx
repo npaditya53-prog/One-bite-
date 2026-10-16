@@ -37,7 +37,7 @@ export function AdminDashboardHome({ onNavigateTab, onViewLiveSite }: AdminDashb
       value: gallery.length,
       sub: `${gallery.filter(g => g.featured).length} featured photos`,
       icon: Image,
-      color: 'bg-purple-100 text-purple-800',
+      color: 'bg-stone-200 text-stone-800',
       tab: 'gallery',
     },
     {

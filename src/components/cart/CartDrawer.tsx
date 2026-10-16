@@ -500,7 +500,7 @@ export function CartDrawer() {
               </button>
 
               <p className="text-[10px] text-center text-stone-500 leading-normal">
-                Order details will be sent directly to One Bite Motihari (+91-7079755703). The restaurant team will confirm dish availability, preparation time, and delivery.
+                Order details will be sent directly to One Bite Motihari ({settings.phone || '+91 82104 42538'}). The restaurant team will confirm dish availability, preparation time, and delivery.
               </p>
             </form>
           </div>

@@ -99,7 +99,7 @@ export function ContactSection() {
           {/* Card 4: Hours & Socials */}
           <div className="bg-stone-50/70 p-6 rounded-2xl border border-stone-200/80 flex flex-col justify-between">
             <div>
-              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center mb-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center mb-4">
                 <Clock className="w-6 h-6" />
               </div>
               <h3 className="text-base font-bold text-stone-900 mb-1">Hours & Socials</h3>
