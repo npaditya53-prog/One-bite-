@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { GalleryItem } from '../../types/index.ts';
 import { X, ChevronLeft, ChevronRight, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { getOptimizedImageUrl } from '../../utils/imageUtils.ts';
 
 interface GallerySectionProps {
   id?: string;
@@ -88,9 +89,10 @@ export function GallerySection({ id = 'gallery', isStandalonePage = false }: Gal
                 className="group relative rounded-2xl overflow-hidden aspect-4/3 bg-stone-100 cursor-pointer shadow-xs hover:shadow-lg transition-all duration-300"
               >
                 <img
-                  src={photo.imageUrl}
+                  src={getOptimizedImageUrl(photo.imageUrl, 600, 75)}
                   alt={photo.caption || 'One Bite restaurant photo'}
                   loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-4 flex flex-col justify-end text-white">
@@ -170,7 +172,7 @@ export function GallerySection({ id = 'gallery', isStandalonePage = false }: Gal
           {/* Lightbox content */}
           <div className="max-w-4xl max-h-[85vh] flex flex-col items-center">
             <img
-              src={activePhoto.imageUrl}
+              src={getOptimizedImageUrl(activePhoto.imageUrl, 1200, 85)}
               alt={activePhoto.caption || 'One Bite gallery image'}
               className="max-h-[72vh] max-w-full object-contain rounded-xl shadow-2xl"
             />

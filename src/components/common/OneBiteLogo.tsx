@@ -5,6 +5,7 @@ interface OneBiteLogoProps {
   showLocation?: boolean;
   className?: string;
   alt?: string;
+  onClick?: () => void;
 }
 
 export function OneBiteLogo({
@@ -12,6 +13,7 @@ export function OneBiteLogo({
   showLocation = false,
   className = '',
   alt = 'One Bite Motihari Official Brand Logo',
+  onClick,
 }: OneBiteLogoProps) {
   // Height classes with responsive scaling, always maintaining aspect ratio
   const sizeClasses = {
@@ -22,7 +24,13 @@ export function OneBiteLogo({
   }[size];
 
   return (
-    <div className={`inline-flex items-center gap-2 select-none ${className}`}>
+    <div
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      className={`inline-flex items-center gap-2 select-none ${onClick ? 'cursor-pointer' : ''} ${className}`}
+    >
       <img
         src="/one-bite-logo.png"
         alt={alt}

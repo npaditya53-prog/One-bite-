@@ -81,12 +81,16 @@ export function CartDrawer() {
         notes: notes.trim(),
       });
 
-      showToast('Order generated! Opening WhatsApp...', 'success');
+      showToast('Order submitted successfully! Opening WhatsApp to connect with the restaurant...', 'success');
 
-      // Open WhatsApp in new tab / app
-      setTimeout(() => {
-        window.open(res.whatsappUrl, '_blank');
-      }, 300);
+      // Dispatch WhatsApp link safely without window.open
+      const link = document.createElement('a');
+      link.href = res.whatsappUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (err: any) {
       showToast(err?.message || 'Failed to place order', 'error');
     } finally {
@@ -124,8 +128,11 @@ export function CartDrawer() {
           <div className="flex items-center gap-2">
             {cart.length > 0 && (
               <button
-                onClick={clearCart}
-                className="text-xs text-stone-400 hover:text-rose-400 p-1.5 transition-colors"
+                onClick={() => {
+                  clearCart();
+                  showToast('Cart cleared', 'info');
+                }}
+                className="text-xs text-stone-400 hover:text-rose-400 p-1.5 transition-colors cursor-pointer"
                 title="Clear all items"
               >
                 Clear
@@ -488,12 +495,12 @@ export function CartDrawer() {
                 className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 <MessageSquare className="w-4 h-4" />
-                <span>{isSubmitting ? 'Processing...' : `Confirm & Order on WhatsApp (₹${cartDiscount.finalTotal})`}</span>
+                <span>{isSubmitting ? 'Processing...' : `Send Order via WhatsApp (₹${cartDiscount.finalTotal})`}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <p className="text-[10px] text-center text-stone-500">
-                Orders are sent directly to the official One Bite Motihari branch WhatsApp hotline (+91-7079755703).
+              <p className="text-[10px] text-center text-stone-500 leading-normal">
+                Order details will be sent directly to One Bite Motihari (+91-7079755703). The restaurant team will confirm dish availability, preparation time, and delivery.
               </p>
             </form>
           </div>

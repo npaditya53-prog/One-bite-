@@ -4,6 +4,7 @@ import { Tag, Copy, Check, ArrowRight, Sparkles, Calendar, Utensils, CheckCircle
 import { useToast } from '../common/Toast.tsx';
 import { getOfferTargetLabel, isOfferPubliclyActive } from '../../utils/offerUtils.ts';
 import { OfferItem } from '../../types/index.ts';
+import { getOptimizedImageUrl } from '../../utils/imageUtils.ts';
 
 export function OffersSection() {
   const { activeOffers, applyOffer, setIsCartOpen } = useRestaurant();
@@ -80,9 +81,10 @@ export function OffersSection() {
                 {offer.imageUrl && (
                   <div className="h-44 w-full bg-stone-100 overflow-hidden relative">
                     <img
-                      src={offer.imageUrl}
+                      src={getOptimizedImageUrl(offer.imageUrl, 700, 75)}
                       alt={offer.title}
                       loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-stone-950/70 via-transparent to-transparent" />

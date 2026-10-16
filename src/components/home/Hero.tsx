@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { ArrowRight, MapPin, Phone, MessageSquare, Clock, Sparkles, CheckCircle2 } from 'lucide-react';
+import { getOptimizedImageUrl } from '../../utils/imageUtils.ts';
 
 interface HeroProps {
   onNavigateToMenu?: () => void;
@@ -29,8 +30,10 @@ export function Hero({ onNavigateToMenu }: HeroProps) {
       {/* Background Hero Image with atmospheric gradient overlay */}
       <div className="absolute inset-0 z-0">
         <img
-          src={settings.heroImageUrl}
+          src={getOptimizedImageUrl(settings.heroImageUrl, 1200, 75)}
           alt="One Bite Motihari Food"
+          fetchPriority="high"
+          decoding="async"
           className="w-full h-full object-cover object-center opacity-30 scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-stone-950 via-stone-950/90 to-stone-950/60" />

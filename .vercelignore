@@ -1,4 +1,9 @@
 .git
 .aistudio
 node_modules
-.env.local
+.env*
+!.env.example
+data/database.json
+*.pem
+*.key
+

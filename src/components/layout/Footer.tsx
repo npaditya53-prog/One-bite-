@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { OneBiteLogo } from '../common/OneBiteLogo.tsx';
-import { Phone, MessageSquare, MapPin, Instagram, Facebook, Shield, Heart } from 'lucide-react';
+import { Phone, MessageSquare, MapPin, Instagram, Facebook, Shield, Heart, Mail } from 'lucide-react';
 
 interface FooterProps {
   onNavigate: (view: string) => void;
@@ -9,7 +9,6 @@ interface FooterProps {
 
 export function Footer({ onNavigate }: FooterProps) {
   const { settings, openStatus } = useRestaurant();
-  const [modalType, setModalType] = useState<'privacy' | 'terms' | null>(null);
 
   const cleanPhone = settings.whatsapp ? settings.whatsapp.replace(/[^0-9]/g, '') : '';
   const whatsappUrl = cleanPhone
@@ -22,9 +21,16 @@ export function Footer({ onNavigate }: FooterProps) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
           {/* Col 1 & 2: Brand Info */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="mb-2">
+            <button
+              onClick={() => {
+                onNavigate('home');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="text-left cursor-pointer focus:outline-none mb-2 block"
+              title="Return to Home"
+            >
               <OneBiteLogo size="lg" showLocation />
-            </div>
+            </button>
 
             <p className="text-xs sm:text-sm text-stone-400 leading-relaxed max-w-sm">
               {settings.description}
@@ -113,6 +119,22 @@ export function Footer({ onNavigate }: FooterProps) {
                   Customer Reviews
                 </button>
               </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('location')}
+                  className="hover:text-amber-400 transition-colors cursor-pointer"
+                >
+                  Location & Hours
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('contact')}
+                  className="hover:text-amber-400 transition-colors cursor-pointer"
+                >
+                  Contact & Orders
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -130,8 +152,8 @@ export function Footer({ onNavigate }: FooterProps) {
                 />
                 <span>{openStatus.isOpen ? 'Open Now' : 'Closed'}</span>
               </div>
-              <p>Monday – Friday: 11:00 AM – 10:00 PM</p>
-              <p>Saturday – Sunday: 11:00 AM – 10:30 PM</p>
+              <p>Monday to Friday: 11:00 AM to 10:00 PM</p>
+              <p>Saturday & Sunday: 11:00 AM to 10:30 PM</p>
               <p className="text-amber-400/90 pt-1">Dine-in, Takeaway & Delivery</p>
             </div>
           </div>
@@ -141,25 +163,36 @@ export function Footer({ onNavigate }: FooterProps) {
             <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-4">
               Outlet Location
             </h4>
-            <div className="text-xs text-stone-400 space-y-2 mb-4">
+            <div className="text-xs text-stone-400 space-y-1.5 mb-4">
               <p>{settings.address}</p>
-              <p>Rajendra Nagar, Motihari</p>
-              <p>Bihar 845401, India</p>
+              <p>{settings.city}, {settings.state} {settings.pincode}</p>
             </div>
 
             {settings.phone && (
               <a
                 href={`tel:${settings.phone}`}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 block mb-4"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 block mb-2 transition-colors"
+                title="Call Restaurant Directly"
               >
                 <Phone className="w-3.5 h-3.5" />
                 <span>{settings.phone}</span>
               </a>
             )}
 
+            {settings.email && (
+              <a
+                href={`mailto:${settings.email}`}
+                className="inline-flex items-center gap-1.5 text-xs text-stone-300 hover:text-amber-400 block mb-4 transition-colors"
+                title="Send Email to Restaurant"
+              >
+                <Mail className="w-3.5 h-3.5 text-amber-400" />
+                <span>{settings.email}</span>
+              </a>
+            )}
+
             <button
               onClick={() => onNavigate('admin')}
-              className="inline-flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-300 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-stone-500 hover:text-stone-300 transition-colors cursor-pointer"
             >
               <Shield className="w-3.5 h-3.5" />
               <span>Owner Admin Login</span>
@@ -175,75 +208,28 @@ export function Footer({ onNavigate }: FooterProps) {
 
           <div className="flex items-center gap-6">
             <button
-              onClick={() => setModalType('privacy')}
-              className="hover:text-stone-300 transition-colors"
+              onClick={() => {
+                onNavigate('privacy');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hover:text-amber-400 transition-colors cursor-pointer"
             >
               Privacy Policy
             </button>
             <button
-              onClick={() => setModalType('terms')}
-              className="hover:text-stone-300 transition-colors"
+              onClick={() => {
+                onNavigate('terms');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hover:text-amber-400 transition-colors cursor-pointer"
             >
-              Terms of Service
+              Terms & Conditions
             </button>
             <span className="text-stone-600 hidden sm:inline">·</span>
-            <span className="hidden sm:inline">Bagaha Dhala Road, Motihari</span>
+            <span className="hidden sm:inline">{settings.city}, Bihar {settings.pincode}</span>
           </div>
         </div>
       </div>
-
-      {/* Privacy Policy / Terms Modal */}
-      {modalType && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
-          onClick={() => setModalType(null)}
-        >
-          <div
-            className="bg-white text-stone-900 rounded-2xl p-6 sm:p-8 max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="text-xl font-bold mb-4">
-              {modalType === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}
-            </h3>
-            <div className="text-xs sm:text-sm text-stone-600 space-y-3 leading-relaxed mb-6">
-              {modalType === 'privacy' ? (
-                <>
-                  <p>
-                    One Bite Motihari respects your personal privacy. We only collect contact
-                    details necessary for food preparation, order confirmation, and delivery coordination.
-                  </p>
-                  <p>
-                    We never sell or share your phone numbers or contact data with third-party advertisers.
-                  </p>
-                  <p>
-                    For questions regarding orders or personal data, you can reach out directly to us at our Bagaha Dhala Road branch or via our official WhatsApp line.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p>
-                    All menu prices are in Indian Rupees (₹) and are subject to availability.
-                  </p>
-                  <p>
-                    Food is prepared fresh to order. For party or bulk orders, advance notice is appreciated.
-                  </p>
-                  <p>
-                    Store hours and delivery radius around Motihari are determined by local operational conditions.
-                  </p>
-                </>
-              )}
-            </div>
-            <button
-              onClick={() => setModalType(null)}
-              className="w-full py-2.5 px-4 bg-stone-900 hover:bg-stone-800 text-white font-semibold rounded-xl text-xs transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </footer>
   );
 }

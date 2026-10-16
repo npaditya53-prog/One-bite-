@@ -56,7 +56,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
       <aside className="hidden md:flex w-64 bg-stone-950 text-white flex-col border-r border-stone-800 shrink-0">
         {/* Brand header */}
         <div className="p-4 border-b border-stone-800 flex items-center justify-between">
-          <OneBiteLogo size="sm" showLocation />
+          <OneBiteLogo size="sm" showLocation onClick={onViewLiveSite} />
         </div>
 
         {/* Navigation links */}
@@ -175,7 +175,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-stone-800 mb-4">
-              <OneBiteLogo size="sm" showLocation />
+              <OneBiteLogo size="sm" showLocation onClick={onViewLiveSite} />
               <button
                 onClick={() => setMobileSidebarOpen(false)}
                 className="p-1.5 text-stone-400 hover:text-white"

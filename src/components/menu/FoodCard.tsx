@@ -5,6 +5,7 @@ import { Flame, Eye, Plus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { useToast } from '../common/Toast.tsx';
 import { getBestOfferForItem } from '../../utils/offerUtils.ts';
+import { getOptimizedImageUrl } from '../../utils/imageUtils.ts';
 
 interface FoodCardProps {
   item: MenuItem;
@@ -60,9 +61,10 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
         onClick={() => onSelect(item)}
       >
         <img
-          src={item.imageUrl}
+          src={getOptimizedImageUrl(item.imageUrl, 550, 75)}
           alt={item.name}
           loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
         />
 

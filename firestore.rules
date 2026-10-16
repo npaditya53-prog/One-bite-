@@ -90,7 +90,7 @@ service cloud.firestore {
     // Orders
     function isValidOrder(data) {
       return data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100 &&
-             data.customerPhone is string && data.customerPhone.size() > 0 && data.customerPhone.size() <= 30 &&
+             data.customerPhone is string && data.customerPhone.size() >= 10 && data.customerPhone.size() <= 30 &&
              data.orderType is string && (data.orderType == 'takeaway' || data.orderType == 'delivery' || data.orderType == 'dine_in') &&
              data.totalAmount is number && data.totalAmount >= 0 &&
              data.status is string && (data.status == 'pending' || data.status == 'confirmed' || data.status == 'preparing' || data.status == 'completed' || data.status == 'cancelled') &&
@@ -100,7 +100,7 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow read: if isAdmin();
       allow create: if isValidId(orderId) && isValidOrder(incoming()) && incoming().status == 'pending';
-      allow update: if isAdmin() && isValidId(orderId) && isValidOrder(incoming());
+      allow update: if isAdmin() && isValidId(orderId) && isValidOrder(incoming()) && incoming().createdAt == existing().createdAt;
       allow delete: if isAdmin() && isValidId(orderId);
     }
 

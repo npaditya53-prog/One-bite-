@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { CheckCircle2, MapPin, Sparkles } from 'lucide-react';
+import { getOptimizedImageUrl } from '../../utils/imageUtils.ts';
 
 export function AboutSection() {
   const { settings } = useRestaurant();
@@ -13,9 +14,10 @@ export function AboutSection() {
           <div className="relative order-2 lg:order-1">
             <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-4/3 bg-stone-100">
               <img
-                src={settings.aboutImageUrl}
+                src={getOptimizedImageUrl(settings.aboutImageUrl, 800, 75)}
                 alt={settings.restaurantName}
                 loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />

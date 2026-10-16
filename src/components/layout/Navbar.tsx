@@ -89,9 +89,9 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
           </nav>
 
           {/* Desktop Right CTA Bar */}
-          <div className="hidden sm:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             {/* Status dot */}
-            <div className="hidden xl:flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-stone-900 border border-stone-800 text-stone-300">
+            <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-stone-900 border border-stone-800 text-stone-300">
               <span
                 className={`w-2 h-2 rounded-full ${
                   openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-stone-500'
@@ -102,8 +102,9 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
             {settings.phone && (
               <a
-                href={`tel:${settings.phone}`}
-                className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-stone-200 hover:text-white hover:bg-stone-900 text-xs font-semibold transition-colors"
+                href={`tel:${settings.phone.replace(/[^0-9+]/g, '')}`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-stone-200 hover:text-white hover:bg-stone-900 text-xs font-semibold transition-colors"
+                title="Call Restaurant Directly"
               >
                 <Phone className="w-3.5 h-3.5 text-amber-400" />
                 <span>{settings.phone}</span>
@@ -124,13 +125,14 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
             </a>
           </div>
 
-          {/* Mobile Right Controls: Phone + Admin Login + Hamburger */}
-          <div className="flex sm:hidden items-center gap-2">
+          {/* Mobile & Tablet Right Controls (< 1024px): Phone + Admin Login + Hamburger */}
+          <div className="flex lg:hidden items-center gap-2">
             {settings.phone && (
               <a
-                href={`tel:${settings.phone}`}
+                href={`tel:${settings.phone.replace(/[^0-9+]/g, '')}`}
                 className="p-2 rounded-lg bg-stone-900 text-amber-400 border border-stone-800"
                 aria-label="Call restaurant"
+                title="Call One Bite Motihari"
               >
                 <Phone className="w-4 h-4" />
               </a>
@@ -151,7 +153,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg bg-stone-900 text-stone-200 hover:text-white border border-stone-800"
+              className="p-2 rounded-lg bg-stone-900 text-stone-200 hover:text-white border border-stone-800 cursor-pointer"
               aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -181,7 +183,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
             <button
               onClick={() => handleLinkClick('admin')}
-              className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-amber-400 hover:bg-stone-900 flex items-center justify-between"
+              className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-amber-400 hover:bg-stone-900 flex items-center justify-between cursor-pointer"
             >
               <span className="flex items-center gap-2">
                 <Shield className="w-4 h-4" />
@@ -191,16 +193,41 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
             </button>
           </div>
 
-          <div className="pt-4 border-t border-stone-800/80 flex flex-col gap-2.5 text-xs text-stone-400">
+          <div className="pt-4 border-t border-stone-800/80 flex flex-col gap-3 text-xs text-stone-400">
             <div className="flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full ${
                   openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-stone-500'
                 }`}
               />
-              <span>{openStatus.statusText}</span>
+              <span className="font-medium text-stone-200">{openStatus.statusText}</span>
             </div>
-            <div>{settings.address}, Motihari</div>
+
+            <div className="flex flex-col gap-2 pt-1 border-t border-stone-900">
+              {settings.phone && (
+                <a
+                  href={`tel:${settings.phone.replace(/[^0-9+]/g, '')}`}
+                  className="inline-flex items-center gap-2 text-stone-300 hover:text-amber-400 font-semibold"
+                  title="Call Restaurant Directly"
+                >
+                  <Phone className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{settings.phone}</span>
+                </a>
+              )}
+
+              {settings.email && (
+                <a
+                  href={`mailto:${settings.email}`}
+                  className="inline-flex items-center gap-2 text-stone-300 hover:text-amber-400 font-semibold"
+                  title="Send Email to Restaurant"
+                >
+                  <span className="text-amber-400 font-bold">@</span>
+                  <span>{settings.email}</span>
+                </a>
+              )}
+            </div>
+
+            <div className="text-[11px] text-stone-500">{settings.address}, {settings.city}</div>
           </div>
         </div>
       )}

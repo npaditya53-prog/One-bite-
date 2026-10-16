@@ -31,6 +31,10 @@ import { getOfferStatus, getOfferTargetLabel } from '../../utils/offerUtils.ts';
 
 const PRESET_POSTERS = [
   {
+    label: 'One Bite Navratri Festival Poster',
+    url: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
+  },
+  {
     label: 'Delicious Combo',
     url: 'https://images.unsplash.com/photo-1550547660-d9450f859349?auto=format&fit=crop&w=800&q=80',
   },

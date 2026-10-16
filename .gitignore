@@ -1,8 +1,32 @@
+# Dependencies
 node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
+.pnp
+.pnp.js
+
+# Environment Variables & Secrets
+.env
+.env.*
 !.env.example
+*.local
+
+# Firebase Admin & Service Account Credentials
+service-account*.json
+firebase-adminsdk*.json
+*.pem
+*.key
+*.cert
+.firebase/
+
+# Production Build Output
+dist/
+build/
+coverage/
+
+# Local Data, Logs & Uploads
+data/database.json
+public/uploads/
+*.log
+.DS_Store
+Thumbs.db
+
+

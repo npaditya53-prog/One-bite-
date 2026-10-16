@@ -8,7 +8,7 @@ interface MobileStickyCtaProps {
 }
 
 export function MobileStickyCta({ currentView, onNavigate }: MobileStickyCtaProps) {
-  const { settings } = useRestaurant();
+  const { settings, cart, setIsCartOpen } = useRestaurant();
 
   // Hide on admin routes
   if (currentView.startsWith('admin')) {
@@ -75,8 +75,21 @@ export function MobileStickyCta({ currentView, onNavigate }: MobileStickyCtaProp
           <span className="text-[10px] font-semibold">Menu</span>
         </button>
 
-        {/* Order */}
-        {orderUrl ? (
+        {/* Cart / Order */}
+        {cart.length > 0 ? (
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl bg-amber-600 active:bg-amber-700 text-white shadow-xs font-bold relative cursor-pointer"
+          >
+            <div className="relative">
+              <ShoppingBag className="w-4 h-4 text-white mb-0.5" />
+              <span className="absolute -top-1.5 -right-2 bg-white text-stone-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                {cart.length}
+              </span>
+            </div>
+            <span className="text-[10px]">Cart ({cart.length})</span>
+          </button>
+        ) : orderUrl ? (
           <a
             href={orderUrl}
             target="_blank"
@@ -89,7 +102,7 @@ export function MobileStickyCta({ currentView, onNavigate }: MobileStickyCtaProp
         ) : (
           <button
             onClick={() => onNavigate('menu')}
-            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl bg-amber-600 text-white font-bold"
+            className="flex flex-col items-center justify-center py-2 px-1 rounded-xl bg-amber-600 text-white font-bold cursor-pointer"
           >
             <ShoppingBag className="w-4 h-4 mb-0.5" />
             <span className="text-[10px]">Order</span>

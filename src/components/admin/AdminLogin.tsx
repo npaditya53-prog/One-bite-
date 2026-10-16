@@ -57,7 +57,7 @@ export function AdminLogin({ onSuccess, onBackToSite }: AdminLoginProps) {
     <div className="min-h-screen bg-stone-950 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center mb-5">
-          <OneBiteLogo size="lg" />
+          <OneBiteLogo size="lg" onClick={onBackToSite} />
         </div>
 
         <h2 className="text-center text-xl sm:text-2xl font-extrabold text-white tracking-tight">

@@ -15,25 +15,39 @@ import { ReviewsSection } from './components/home/ReviewsSection.tsx';
 import { ContactSection } from './components/home/ContactSection.tsx';
 import { Footer } from './components/layout/Footer.tsx';
 import { MobileStickyCta } from './components/layout/MobileStickyCta.tsx';
-import { AdminLayout } from './components/admin/AdminLayout.tsx';
-import { AdminLogin } from './components/admin/AdminLogin.tsx';
 import { OneBiteLogo } from './components/common/OneBiteLogo.tsx';
+import { NotFoundPage } from './components/common/NotFoundPage.tsx';
+import { PrivacyPolicyPage } from './components/legal/PrivacyPolicyPage.tsx';
+import { TermsConditionsPage } from './components/legal/TermsConditionsPage.tsx';
 import { AlertCircle } from 'lucide-react';
+
+const AdminLayout = React.lazy(() =>
+  import('./components/admin/AdminLayout.tsx').then(m => ({ default: m.AdminLayout }))
+);
+const AdminLogin = React.lazy(() =>
+  import('./components/admin/AdminLogin.tsx').then(m => ({ default: m.AdminLogin }))
+);
 
 function pathToView(pathname: string): string {
   if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname === '/' || pathname === '') return 'home';
   if (pathname === '/menu') return 'menu';
   if (pathname === '/about') return 'about';
   if (pathname === '/gallery') return 'gallery';
   if (pathname === '/reviews') return 'reviews';
   if (pathname === '/location') return 'location';
   if (pathname === '/contact') return 'contact';
-  return 'home';
+  if (pathname === '/privacy') return 'privacy';
+  if (pathname === '/terms') return 'terms';
+  return 'not-found';
 }
 
 function viewToPath(view: string): string {
   if (view === 'home') return '/';
   if (view === 'admin') return '/admin';
+  if (view === 'privacy') return '/privacy';
+  if (view === 'terms') return '/terms';
+  if (view === 'not-found') return '/404';
   return `/${view}`;
 }
 
@@ -42,6 +56,73 @@ function MainContent() {
   const [currentView, setCurrentView] = useState<string>(() => {
     return pathToView(window.location.pathname);
   });
+
+  // Dynamic Page Titles and Meta Descriptions
+  useEffect(() => {
+    const titles: Record<string, { title: string; desc: string }> = {
+      home: {
+        title: 'One Bite Motihari | Good Food. Great Mood.',
+        desc: 'Official website for One Bite restaurant in Motihari, Bihar. Discover delicious burgers, pizzas, sandwiches, wraps, shakes, location at Bagaha Dhala Road, opening hours, and direct ordering.',
+      },
+      menu: {
+        title: 'Menu & Prices | One Bite Motihari',
+        desc: 'Explore the complete menu of One Bite Motihari: Handcrafted burgers, fresh dough pizzas, crispy chicken buckets, potato tornados, cheesy wraps, and desserts.',
+      },
+      about: {
+        title: 'About Us | One Bite Motihari - Family Restaurant',
+        desc: 'Learn about One Bite Motihari. Part of India’s fast-growing quick-service food brand with over 400+ outlets, serving fresh, handcrafted food made to order.',
+      },
+      gallery: {
+        title: 'Food & Ambience Gallery | One Bite Motihari',
+        desc: 'Browse mouth-watering photos of our signature fast food, delicious pizzas, burgers, shakes, and the cozy dine-in experience at One Bite Motihari.',
+      },
+      reviews: {
+        title: 'Customer Reviews & Ratings | One Bite Motihari',
+        desc: 'Read genuine reviews and feedback from food lovers across Motihari who dine and order from One Bite restaurant.',
+      },
+      location: {
+        title: 'Location & Opening Hours | One Bite Motihari',
+        desc: 'Find One Bite Motihari at Arya Samaj Chowk, Motihari, Bihar. View working hours, Google Maps directions, and contact information.',
+      },
+      contact: {
+        title: 'Contact Us & Direct Order | One Bite Motihari',
+        desc: 'Get in touch with One Bite Motihari. Call directly or chat via WhatsApp to place fast dine-in, takeaway, or delivery food orders.',
+      },
+      privacy: {
+        title: 'Privacy Policy | One Bite Motihari',
+        desc: 'Privacy Policy for One Bite restaurant in Motihari, Bihar. Explains how customer data is kept private and secure.',
+      },
+      terms: {
+        title: 'Terms & Conditions | One Bite Motihari',
+        desc: 'Terms and conditions for orders, dine-in service, takeaway, and food delivery at One Bite Motihari.',
+      },
+      admin: {
+        title: 'Admin Portal | One Bite Motihari CMS',
+        desc: 'Secure restaurant owner management portal for One Bite Motihari.',
+      },
+      'not-found': {
+        title: 'Page Not Found (404) | One Bite Motihari',
+        desc: 'The page you requested could not be found. Explore our delicious menu or return to the One Bite Motihari home page.',
+      },
+    };
+
+    const currentMeta = titles[currentView] || titles.home;
+    document.title = currentMeta.title;
+
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement('meta');
+      metaDesc.setAttribute('name', 'description');
+      document.head.appendChild(metaDesc);
+    }
+    metaDesc.setAttribute('content', currentMeta.desc);
+
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute('content', currentMeta.title);
+
+    let ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute('content', currentMeta.desc);
+  }, [currentView]);
 
   // Sync route with URL bar
   useEffect(() => {
@@ -94,14 +175,27 @@ function MainContent() {
 
   // Admin View
   if (currentView === 'admin') {
+    const adminFallback = (
+      <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center text-white p-4">
+        <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <span className="text-xs text-stone-400">Loading Admin Portal...</span>
+      </div>
+    );
+
     if (isAdmin) {
-      return <AdminLayout onViewLiveSite={() => navigateTo('home')} />;
+      return (
+        <React.Suspense fallback={adminFallback}>
+          <AdminLayout onViewLiveSite={() => navigateTo('home')} />
+        </React.Suspense>
+      );
     }
     return (
-      <AdminLogin
-        onSuccess={() => navigateTo('admin')}
-        onBackToSite={() => navigateTo('home')}
-      />
+      <React.Suspense fallback={adminFallback}>
+        <AdminLogin
+          onSuccess={() => navigateTo('admin')}
+          onBackToSite={() => navigateTo('home')}
+        />
+      </React.Suspense>
     );
   }
 
@@ -182,6 +276,23 @@ function MainContent() {
           <div className="pt-20">
             <ContactSection />
             <LocationSection />
+          </div>
+        )}
+
+        {/* VIEW: PRIVACY POLICY */}
+        {currentView === 'privacy' && (
+          <PrivacyPolicyPage onNavigate={navigateTo} />
+        )}
+
+        {/* VIEW: TERMS AND CONDITIONS */}
+        {currentView === 'terms' && (
+          <TermsConditionsPage onNavigate={navigateTo} />
+        )}
+
+        {/* VIEW: NOT FOUND (404) */}
+        {currentView === 'not-found' && (
+          <div className="pt-20">
+            <NotFoundPage onNavigate={navigateTo} />
           </div>
         )}
       </main>
