@@ -1,6 +1,6 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
-import { Utensils, FolderTree, Image, Star, Tag, Clock, ArrowRight, Plus, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { Utensils, FolderTree, Image, Star, Tag, Clock, ArrowRight, Plus, ExternalLink, CheckCircle2, ShoppingBag } from 'lucide-react';
 import { isOfferPubliclyActive } from '../../utils/offerUtils.ts';
 
 interface AdminDashboardHomeProps {
@@ -9,13 +9,22 @@ interface AdminDashboardHomeProps {
 }
 
 export function AdminDashboardHome({ onNavigateTab, onViewLiveSite }: AdminDashboardHomeProps) {
-  const { menuItems, categories, gallery, reviews, offers, settings, openStatus } = useRestaurant();
+  const { menuItems, categories, gallery, reviews, offers, settings, openStatus, orders } = useRestaurant();
 
   const activeItemsCount = menuItems.filter(i => i.available).length;
   const unavailableCount = menuItems.length - activeItemsCount;
   const popularCount = menuItems.filter(i => i.popular).length;
+  const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
 
   const stats = [
+    {
+      label: 'Home Delivery Orders',
+      value: orders.length,
+      sub: `${pendingOrdersCount} pending confirmation · POD`,
+      icon: ShoppingBag,
+      color: 'bg-emerald-100 text-emerald-800',
+      tab: 'orders',
+    },
     {
       label: 'Total Menu Items',
       value: menuItems.length,

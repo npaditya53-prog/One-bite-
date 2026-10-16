@@ -76,7 +76,13 @@ interface RestaurantContextType {
   placeOrder: (customer: {
     customerName: string;
     customerPhone: string;
-    orderType: 'takeaway' | 'delivery' | 'dine_in';
+    orderType?: 'takeaway' | 'delivery' | 'dine_in';
+    houseFlat?: string;
+    streetArea?: string;
+    landmark?: string;
+    city?: string;
+    pincode?: string;
+    deliveryInstructions?: string;
     deliveryAddress?: string;
     tableNumber?: string;
     notes?: string;
@@ -103,7 +109,8 @@ interface RestaurantContextType {
   saveBusinessHours: (hours: BusinessDayHours[]) => Promise<void>;
   uploadImage: (data: string, filename?: string) => Promise<string>;
   resetToDefaults: () => Promise<void>;
-  updateOrderStatus: (id: string, status: CustomerOrder['status']) => Promise<void>;
+  updateOrderStatus: (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid') => Promise<void>;
+  updateOrderPaymentStatus: (id: string, paymentStatus: 'unpaid' | 'paid') => Promise<void>;
 }
 
 const RestaurantContext = createContext<RestaurantContextType | undefined>(undefined);
@@ -407,7 +414,13 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     async (customer: {
       customerName: string;
       customerPhone: string;
-      orderType: 'takeaway' | 'delivery' | 'dine_in';
+      orderType?: 'takeaway' | 'delivery' | 'dine_in';
+      houseFlat?: string;
+      streetArea?: string;
+      landmark?: string;
+      city?: string;
+      pincode?: string;
+      deliveryInstructions?: string;
       deliveryAddress?: string;
       tableNumber?: string;
       notes?: string;
@@ -423,45 +436,72 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
 
       const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
       const discountAmount = cartDiscount.discountTotal;
-      const netPayable = Math.max(0, subtotal + addonsTotal - discountAmount);
+
+      // Delivery charge calculation
+      let deliveryCharge = 0;
+      const orderType = customer.orderType || 'delivery';
+      if (orderType === 'delivery') {
+        const configuredFee = data.settings.deliveryCharge ?? 0;
+        const freeThreshold = data.settings.freeDeliveryThreshold ?? 0;
+        if (configuredFee > 0) {
+          if (freeThreshold > 0 && subtotal >= freeThreshold) {
+            deliveryCharge = 0;
+          } else {
+            deliveryCharge = configuredFee;
+          }
+        }
+      }
+
+      const finalTotal = Math.max(0, subtotal + addonsTotal - discountAmount + deliveryCharge);
+      const orderRef = 'OB-HD-' + Date.now().toString().slice(-6);
+
+      const compositeAddress = [
+        customer.houseFlat ? `Flat/House ${customer.houseFlat}` : '',
+        customer.streetArea,
+        customer.landmark ? `Near ${customer.landmark}` : '',
+        customer.city || 'Motihari',
+        customer.pincode ? `PIN: ${customer.pincode}` : '',
+      ].filter(Boolean).join(', ');
+
+      const orderPayload: Partial<CustomerOrder> = {
+        id: orderRef,
+        customerName: customer.customerName,
+        customerPhone: customer.customerPhone,
+        orderType,
+        houseFlat: customer.houseFlat,
+        streetArea: customer.streetArea,
+        landmark: customer.landmark,
+        city: customer.city || 'Motihari',
+        pincode: customer.pincode || '845401',
+        deliveryInstructions: customer.deliveryInstructions,
+        deliveryAddress: customer.deliveryAddress || compositeAddress,
+        tableNumber: customer.tableNumber,
+        notes: customer.notes || customer.deliveryInstructions,
+        items: cart,
+        subtotal,
+        addonsTotal,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined,
+        appliedOfferTitle: discountAmount > 0 && appliedOffer ? appliedOffer.title : undefined,
+        deliveryCharge,
+        totalAmount: finalTotal,
+        paymentMethod: 'pay_on_delivery',
+        paymentStatus: 'unpaid',
+        status: 'pending',
+      };
 
       // Create order via API
       let createdOrder: CustomerOrder;
       try {
-        createdOrder = await api.createOrder({
-          customerName: customer.customerName,
-          customerPhone: customer.customerPhone,
-          orderType: customer.orderType,
-          deliveryAddress: customer.deliveryAddress,
-          tableNumber: customer.tableNumber,
-          notes: customer.notes,
-          items: cart,
-          subtotal,
-          addonsTotal,
-          discountAmount: discountAmount > 0 ? discountAmount : undefined,
-          appliedOfferTitle: discountAmount > 0 && appliedOffer ? appliedOffer.title : undefined,
-          totalAmount: netPayable,
-        });
+        createdOrder = await api.createOrder(orderPayload);
         setOrders(prev => [createdOrder, ...prev]);
       } catch (err) {
-        console.warn('Backend order store failed, fallback to local object:', err);
+        console.warn('Backend order store failed, using fallback object:', err);
         createdOrder = {
-          id: 'ord_' + Date.now().toString(36),
-          customerName: customer.customerName,
-          customerPhone: customer.customerPhone,
-          orderType: customer.orderType,
-          deliveryAddress: customer.deliveryAddress,
-          tableNumber: customer.tableNumber,
-          notes: customer.notes,
-          items: cart,
-          subtotal,
-          addonsTotal,
-          discountAmount: discountAmount > 0 ? discountAmount : undefined,
-          appliedOfferTitle: discountAmount > 0 && appliedOffer ? appliedOffer.title : undefined,
-          totalAmount: netPayable,
-          status: 'pending',
+          ...(orderPayload as CustomerOrder),
+          id: orderRef,
           createdAt: new Date().toISOString(),
         };
+        setOrders(prev => [createdOrder, ...prev]);
       }
 
       // Also persist order to Firestore
@@ -471,54 +511,50 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         console.warn('Firestore order write error (non-fatal):', fsErr);
       }
 
-      // Build WhatsApp message
-      const orderTypeLabel = {
-        takeaway: 'Takeaway / Pickup',
-        delivery: 'Home Delivery',
-        dine_in: `Dine-In ${customer.tableNumber ? `(Table: ${customer.tableNumber})` : ''}`,
-      }[customer.orderType];
-
-      let msg = `*NEW ORDER - ONE BITE MOTIHARI*\n`;
-      msg += `*Order ID:* ${createdOrder.id}\n`;
-      msg += `*Customer:* ${customer.customerName}\n`;
-      msg += `*Phone:* ${customer.customerPhone}\n`;
-      msg += `*Order Type:* ${orderTypeLabel}\n`;
-      if (customer.deliveryAddress) {
-        msg += `*Address:* ${customer.deliveryAddress}\n`;
-      }
-      if (customer.notes) {
-        msg += `*Special Note:* ${customer.notes}\n`;
-      }
-      msg += `\n*ITEMS ORDERED:*\n`;
+      // Build WhatsApp message formatted strictly as required
+      let msg = `NEW HOME DELIVERY ORDER — ONE BITE\n\n`;
+      msg += `Order Reference: ${createdOrder.id}\n\n`;
+      msg += `CUSTOMER DETAILS\n`;
+      msg += `Name: ${customer.customerName}\n`;
+      msg += `Mobile: ${customer.customerPhone}\n\n`;
+      msg += `DELIVERY ADDRESS\n`;
+      msg += `House/Flat: ${customer.houseFlat || 'Not provided'}\n`;
+      msg += `Street/Area: ${customer.streetArea || customer.deliveryAddress || 'Not provided'}\n`;
+      msg += `Landmark: ${customer.landmark || 'None'}\n`;
+      msg += `City: ${customer.city || 'Motihari'}\n`;
+      msg += `PIN Code: ${customer.pincode || '845401'}\n`;
+      msg += `Delivery Instructions: ${customer.deliveryInstructions || customer.notes || 'None'}\n\n`;
+      msg += `ORDER ITEMS\n\n`;
 
       cart.forEach((item, idx) => {
-        msg += `${idx + 1}. *${item.name}*`;
-        if (item.variant) {
-          msg += ` (${item.variant.name})`;
-        }
-        msg += ` × ${item.quantity} : ₹${item.unitPrice * item.quantity}\n`;
-        if (item.addons && item.addons.length > 0) {
-          const addonsList = item.addons.map(a => `${a.name} (+₹${a.price})`).join(', ');
-          msg += `   └ Add-ons: ${addonsList}\n`;
-        }
+        const variantText = item.variant ? ` — ${item.variant.name}` : '';
+        const itemAddonsCost = (item.addons || []).reduce((sum, a) => sum + a.price, 0);
+        const lineTotal = (item.unitPrice + itemAddonsCost) * item.quantity;
+        msg += `${idx + 1}. ${item.name}${variantText}\n`;
+        msg += `   Quantity: ${item.quantity}\n`;
+        msg += `   Unit Price: ₹${item.unitPrice}\n`;
+        msg += `   Line Total: ₹${lineTotal}\n\n`;
       });
 
-      msg += `\n*Items Subtotal:* ₹${subtotal}\n`;
-      if (addonsTotal > 0) {
-        msg += `*Add-ons:* ₹${addonsTotal}\n`;
-      }
-      if (discountAmount > 0 && appliedOffer) {
-        msg += `*Offer Applied (${appliedOffer.title}):* -₹${discountAmount}\n`;
-      }
-      msg += `*TOTAL AMOUNT: ₹${netPayable}*\n`;
-      msg += `\nPlease confirm my order. Thank you!`;
+      msg += `PAYMENT SUMMARY\n`;
+      msg += `Subtotal: ₹${subtotal + addonsTotal}\n`;
+      msg += `Discount: ₹${discountAmount}\n`;
+      msg += `Delivery Charge: ₹${deliveryCharge}\n`;
+      msg += `FINAL TOTAL: ₹${finalTotal}\n\n`;
+
+      msg += `PAYMENT METHOD: PAY ON DELIVERY\n`;
+      msg += `Payment Status: UNPAID\n`;
+      msg += `Payment Options: Cash or Delivery Boy's QR Scanner\n`;
+      msg += `Advance Payment: NOT REQUIRED\n\n`;
+
+      msg += `Customer has reviewed the order and delivery details.\n\n`;
+      msg += `Restaurant team: Please check item availability, delivery address, delivery feasibility, and total amount. Confirm the order and estimated delivery time with the customer on WhatsApp.`;
 
       const cleanPhone = (data.settings.whatsapp || '+918210442538').replace(/[^0-9]/g, '');
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
 
-      clearCart();
-      setAppliedOffer(null);
-      setIsCartOpen(false);
+      // NOTE: Do not automatically clear cart just because WhatsApp opens,
+      // as required by user prompt instructions.
 
       return {
         success: true,
@@ -526,7 +562,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         order: createdOrder,
       };
     },
-    [cart, data.settings.whatsapp, clearCart, cartDiscount, appliedOffer]
+    [cart, data.settings.whatsapp, data.settings.deliveryCharge, data.settings.freeDeliveryThreshold, cartDiscount, appliedOffer]
   );
 
   // Admin Actions
@@ -717,8 +753,13 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     await loadData();
   };
 
-  const handleUpdateOrderStatus = async (id: string, status: CustomerOrder['status']) => {
-    const updated = await api.updateOrderStatus(id, status);
+  const handleUpdateOrderStatus = async (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid') => {
+    const updated = await api.updateOrderStatus(id, status, paymentStatus);
+    setOrders(prev => prev.map(o => (o.id === id ? updated : o)));
+  };
+
+  const handleUpdateOrderPaymentStatus = async (id: string, paymentStatus: 'unpaid' | 'paid') => {
+    const updated = await api.updateOrderPaymentStatus(id, paymentStatus);
     setOrders(prev => prev.map(o => (o.id === id ? updated : o)));
   };
 
@@ -777,6 +818,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         uploadImage: handleUploadImage,
         resetToDefaults: handleResetToDefaults,
         updateOrderStatus: handleUpdateOrderStatus,
+        updateOrderPaymentStatus: handleUpdateOrderPaymentStatus,
       }}
     >
       {children}

@@ -328,17 +328,32 @@ export const api = {
     return await res.json();
   },
 
-  async updateOrderStatus(id: string, status: CustomerOrder['status']): Promise<CustomerOrder> {
+  async updateOrderStatus(id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid'): Promise<CustomerOrder> {
     const res = await fetch(`/api/orders/${id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, paymentStatus }),
     });
     if (!res.ok) {
       throw new Error('Failed to update order status');
+    }
+    return await res.json();
+  },
+
+  async updateOrderPaymentStatus(id: string, paymentStatus: 'unpaid' | 'paid'): Promise<CustomerOrder> {
+    const res = await fetch(`/api/orders/${id}/payment`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ paymentStatus }),
+    });
+    if (!res.ok) {
+      throw new Error('Failed to update payment status');
     }
     return await res.json();
   },

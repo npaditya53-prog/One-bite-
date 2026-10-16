@@ -769,6 +769,12 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     customerPhone,
     orderType,
     deliveryAddress,
+    houseFlat,
+    streetArea,
+    landmark,
+    city,
+    pincode,
+    deliveryInstructions,
     tableNumber,
     notes,
     items,
@@ -891,7 +897,21 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     }
   }
 
-  const authoritativeTotal = Math.max(0, authoritativeSubtotal + authoritativeAddonsTotal - authoritativeDiscount);
+  // Delivery fee calculation
+  let deliveryCharge = 0;
+  if (orderType === 'delivery') {
+    const configuredFee = database.settings.deliveryCharge ?? 0;
+    const freeThreshold = database.settings.freeDeliveryThreshold ?? 0;
+    if (configuredFee > 0) {
+      if (freeThreshold > 0 && authoritativeSubtotal >= freeThreshold) {
+        deliveryCharge = 0;
+      } else {
+        deliveryCharge = configuredFee;
+      }
+    }
+  }
+
+  const authoritativeTotal = Math.max(0, authoritativeSubtotal + authoritativeAddonsTotal - authoritativeDiscount + deliveryCharge);
 
   // 3. Deduplication Guard: Check if identical order was submitted within last 30s
   const dedupKey = `${cleanPhone}:${validatedItems.length}:${Math.round(authoritativeTotal)}`;
@@ -903,13 +923,27 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     });
   }
 
-  const orderId = 'ord_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+  const orderId = 'OB-HD-' + Date.now().toString().slice(-6);
+  const compositeAddress = [
+    houseFlat ? `Flat/House ${houseFlat}` : '',
+    streetArea,
+    landmark ? `Near ${landmark}` : '',
+    city || 'Motihari',
+    pincode ? `PIN: ${pincode}` : '',
+  ].filter(Boolean).join(', ');
+
   const newOrder = {
     id: orderId,
     customerName: sanitizeText(customerName, 100),
     customerPhone: cleanPhone,
-    orderType: orderType === 'delivery' || orderType === 'dine_in' ? orderType : 'takeaway',
-    deliveryAddress: sanitizeText(deliveryAddress, 300),
+    orderType: orderType === 'takeaway' || orderType === 'dine_in' ? orderType : 'delivery',
+    houseFlat: sanitizeText(houseFlat, 100),
+    streetArea: sanitizeText(streetArea, 200),
+    landmark: sanitizeText(landmark, 100),
+    city: sanitizeText(city, 50) || 'Motihari',
+    pincode: sanitizeText(pincode, 10) || '845401',
+    deliveryInstructions: sanitizeText(deliveryInstructions, 500),
+    deliveryAddress: sanitizeText(deliveryAddress, 300) || compositeAddress,
     tableNumber: sanitizeText(tableNumber, 20),
     notes: sanitizeText(notes, 500),
     items: validatedItems,
@@ -917,7 +951,10 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     addonsTotal: authoritativeAddonsTotal,
     discountAmount: authoritativeDiscount,
     appliedOfferTitle: finalOfferTitle || undefined,
+    deliveryCharge,
     totalAmount: authoritativeTotal,
+    paymentMethod: 'pay_on_delivery' as const,
+    paymentStatus: 'unpaid' as const,
     status: 'pending' as const,
     createdAt: new Date().toISOString(),
   };
@@ -944,10 +981,38 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
 
 app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, paymentStatus } = req.body;
   const allowedStatuses = ['pending', 'confirmed', 'preparing', 'completed', 'cancelled'];
-  if (!allowedStatuses.includes(status)) {
-    return res.status(400).json({ error: 'Invalid order status value' });
+
+  if (!database.orders) database.orders = [];
+  const order = database.orders.find(o => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found' });
+  }
+
+  if (status) {
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid order status value' });
+    }
+    order.status = status;
+  }
+
+  if (paymentStatus) {
+    if (paymentStatus !== 'paid' && paymentStatus !== 'unpaid') {
+      return res.status(400).json({ error: 'Invalid payment status value' });
+    }
+    order.paymentStatus = paymentStatus;
+  }
+
+  saveDatabase(database);
+  res.json(order);
+});
+
+app.put('/api/orders/:id/payment', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const { paymentStatus } = req.body;
+  if (paymentStatus !== 'paid' && paymentStatus !== 'unpaid') {
+    return res.status(400).json({ error: 'Invalid payment status value. Must be "paid" or "unpaid"' });
   }
 
   if (!database.orders) database.orders = [];
@@ -955,7 +1020,8 @@ app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
   }
-  order.status = status;
+
+  order.paymentStatus = paymentStatus;
   saveDatabase(database);
   res.json(order);
 });

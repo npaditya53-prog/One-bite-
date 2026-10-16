@@ -51,6 +51,9 @@ export interface SiteSettings {
     location: boolean;
     contact: boolean;
   };
+  deliveryCharge?: number;
+  freeDeliveryThreshold?: number;
+  estimatedDeliveryTime?: string;
   updatedAt: string;
 }
 
@@ -116,6 +119,12 @@ export interface CustomerOrder {
   customerName: string;
   customerPhone: string;
   orderType: 'takeaway' | 'delivery' | 'dine_in';
+  houseFlat?: string;
+  streetArea?: string;
+  landmark?: string;
+  city?: string;
+  pincode?: string;
+  deliveryInstructions?: string;
   deliveryAddress?: string;
   tableNumber?: string;
   notes?: string;
@@ -124,7 +133,10 @@ export interface CustomerOrder {
   addonsTotal: number;
   discountAmount?: number;
   appliedOfferTitle?: string;
+  deliveryCharge?: number;
   totalAmount: number;
+  paymentMethod?: 'pay_on_delivery';
+  paymentStatus?: 'unpaid' | 'paid';
   status: 'pending' | 'confirmed' | 'preparing' | 'completed' | 'cancelled';
   createdAt: string;
 }

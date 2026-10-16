@@ -325,6 +325,57 @@ export function AdminSettings() {
               />
             </div>
           </div>
+
+          <div className="pt-3 border-t border-stone-100">
+            <span className="text-xs font-bold text-stone-900 block mb-2">
+              Home Delivery & Pay on Delivery Configuration
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 mb-1">
+                  Delivery Fee (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.deliveryCharge ?? 0}
+                  onChange={e => handleChange('deliveryCharge', Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="0 (Free Delivery)"
+                  className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
+                />
+                <span className="text-[10px] text-stone-500 mt-0.5 block">0 = Free delivery in Motihari town</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 mb-1">
+                  Free Delivery Above (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.freeDeliveryThreshold ?? 0}
+                  onChange={e => handleChange('freeDeliveryThreshold', Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="e.g. 499"
+                  className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
+                />
+                <span className="text-[10px] text-stone-500 mt-0.5 block">Orders above this get free delivery</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-600 mb-1">
+                  Estimated Delivery Time
+                </label>
+                <input
+                  type="text"
+                  value={formData.estimatedDeliveryTime || '30-45 mins'}
+                  onChange={e => handleChange('estimatedDeliveryTime', e.target.value)}
+                  placeholder="30-45 mins in Motihari"
+                  className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
+                />
+                <span className="text-[10px] text-stone-500 mt-0.5 block">Shown during checkout and order status</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Section 3: Location & Google Maps */}

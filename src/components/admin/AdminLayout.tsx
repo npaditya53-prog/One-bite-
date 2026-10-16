@@ -9,8 +9,10 @@ import { AdminReviews } from './AdminReviews.tsx';
 import { AdminOffers } from './AdminOffers.tsx';
 import { AdminHours } from './AdminHours.tsx';
 import { AdminSettings } from './AdminSettings.tsx';
+import { AdminOrders } from './AdminOrders.tsx';
 import {
   LayoutDashboard,
+  ShoppingBag,
   Utensils,
   FolderTree,
   Image,
@@ -30,12 +32,19 @@ interface AdminLayoutProps {
 }
 
 export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
-  const { logout, adminUser, settings } = useRestaurant();
+  const { logout, adminUser, settings, orders } = useRestaurant();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    {
+      id: 'orders',
+      label: pendingOrdersCount > 0 ? `Orders (${pendingOrdersCount})` : 'Orders',
+      icon: ShoppingBag,
+    },
     { id: 'menu', label: 'Menu Items', icon: Utensils },
     { id: 'categories', label: 'Categories', icon: FolderTree },
     { id: 'gallery', label: 'Gallery Photos', icon: Image },
@@ -152,6 +161,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
               onViewLiveSite={onViewLiveSite}
             />
           )}
+          {activeTab === 'orders' && <AdminOrders />}
           {activeTab === 'menu' && <AdminMenu />}
           {activeTab === 'categories' && <AdminCategories />}
           {activeTab === 'gallery' && <AdminGallery />}

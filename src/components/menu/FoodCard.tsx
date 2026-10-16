@@ -1,7 +1,7 @@
 import React from 'react';
 import { MenuItem } from '../../types/index.ts';
 import { FoodTypeBadge } from '../common/FoodTypeBadge.tsx';
-import { Flame, Eye, Plus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
+import { Flame, Eye, Plus, Minus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { useToast } from '../common/Toast.tsx';
 import { getBestOfferForItem } from '../../utils/offerUtils.ts';
@@ -13,10 +13,13 @@ interface FoodCardProps {
 }
 
 export function FoodCard({ item, onSelect }: FoodCardProps) {
-  const { addToCart, setIsCartOpen, activeOffers } = useRestaurant();
+  const { addToCart, updateCartQuantity, cart, activeOffers } = useRestaurant();
   const { showToast } = useToast();
+  const [localQty, setLocalQty] = React.useState(1);
 
   const hasVariants = Boolean(item.variants && item.variants.length > 0);
+  const cartEntry = cart.find(ci => ci.menuItemId === item.id && !ci.variant);
+  const inCartQty = cartEntry?.quantity || 0;
 
   // Dynamic Offer check
   const bestOffer = React.useMemo(() => {
@@ -182,15 +185,59 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
                   <span>Choose Size</span>
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleQuickAdd}
-                  className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md cursor-pointer"
-                  title="Add to order cart"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add to Cart</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center bg-stone-100 border border-stone-200/90 rounded-lg p-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (inCartQty > 0 && cartEntry) {
+                          updateCartQuantity(cartEntry.id, -1);
+                        } else {
+                          setLocalQty(q => Math.max(1, q - 1));
+                        }
+                      }}
+                      className="w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-950 hover:bg-white rounded-md transition-colors cursor-pointer"
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="w-6 text-center text-xs font-extrabold text-stone-900">
+                      {inCartQty > 0 ? inCartQty : localQty}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (inCartQty > 0 && cartEntry) {
+                          updateCartQuantity(cartEntry.id, 1);
+                        } else {
+                          setLocalQty(q => q + 1);
+                        }
+                      }}
+                      className="w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-950 hover:bg-white rounded-md transition-colors cursor-pointer"
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!item.available) return;
+                      const addCount = inCartQty > 0 ? 1 : localQty;
+                      addToCart(item, undefined, [], addCount);
+                      showToast(`Added ${addCount}x ${item.name} to cart!`, 'success');
+                    }}
+                    className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md cursor-pointer shrink-0"
+                    title="Add to order cart"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{inCartQty > 0 ? 'Add More' : 'Add to Cart'}</span>
+                  </button>
+                </div>
               )
             ) : (
               <span className="text-xs font-medium text-stone-400 py-1.5 px-2 bg-stone-100 rounded-lg">

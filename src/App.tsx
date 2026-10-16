@@ -17,6 +17,7 @@ import { Footer } from './components/layout/Footer.tsx';
 import { MobileStickyCta } from './components/layout/MobileStickyCta.tsx';
 import { OneBiteLogo } from './components/common/OneBiteLogo.tsx';
 import { NotFoundPage } from './components/common/NotFoundPage.tsx';
+import { CheckoutPage } from './components/checkout/CheckoutPage.tsx';
 import { PrivacyPolicyPage } from './components/legal/PrivacyPolicyPage.tsx';
 import { TermsConditionsPage } from './components/legal/TermsConditionsPage.tsx';
 import { AlertCircle } from 'lucide-react';
@@ -32,6 +33,7 @@ function pathToView(pathname: string): string {
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname === '/' || pathname === '') return 'home';
   if (pathname === '/menu') return 'menu';
+  if (pathname === '/checkout') return 'checkout';
   if (pathname === '/about') return 'about';
   if (pathname === '/gallery') return 'gallery';
   if (pathname === '/reviews') return 'reviews';
@@ -45,6 +47,7 @@ function pathToView(pathname: string): string {
 function viewToPath(view: string): string {
   if (view === 'home') return '/';
   if (view === 'admin') return '/admin';
+  if (view === 'checkout') return '/checkout';
   if (view === 'privacy') return '/privacy';
   if (view === 'terms') return '/terms';
   if (view === 'not-found') return '/404';
@@ -67,6 +70,10 @@ function MainContent() {
       menu: {
         title: 'Menu & Prices | One Bite Motihari',
         desc: 'Explore the complete menu of One Bite Motihari: Handcrafted burgers, fresh dough pizzas, crispy chicken buckets, potato tornados, cheesy wraps, and desserts.',
+      },
+      checkout: {
+        title: 'Home Delivery Checkout | One Bite Motihari',
+        desc: 'Place your home delivery order with One Bite Motihari. Pay on Delivery only (Cash or QR code to delivery boy). Direct WhatsApp order confirmation.',
       },
       about: {
         title: 'About Us | One Bite Motihari - Family Restaurant',
@@ -276,6 +283,13 @@ function MainContent() {
           <div className="pt-20">
             <ContactSection />
             <LocationSection />
+          </div>
+        )}
+
+        {/* VIEW: CHECKOUT */}
+        {currentView === 'checkout' && (
+          <div className="pt-20">
+            <CheckoutPage onNavigate={navigateTo} />
           </div>
         )}
 

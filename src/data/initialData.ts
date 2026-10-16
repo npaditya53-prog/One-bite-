@@ -77,6 +77,9 @@ export const initialData: DatabaseSchema = {
       location: true,
       contact: true,
     },
+    deliveryCharge: 0,
+    freeDeliveryThreshold: 499,
+    estimatedDeliveryTime: '30-45 mins',
     updatedAt: new Date().toISOString(),
   },
 
