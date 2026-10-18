@@ -26,8 +26,18 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email == 'npaditya53@gmail.com' && request.auth.token.email_verified == true) ||
+        request.auth.token.email == 'npaditya53@gmail.com' ||
+        request.auth.token.email == 'admin@onebitemotihari.in' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isDeliveryBoy() {
+      return isSignedIn() && (
+        request.auth.token.email == 'delivery@onebitemotihari.in' ||
+        request.auth.token.email == 'deliveryboy@onebitemotihari.in' ||
+        exists(/databases/$(database)/documents/delivery_boys/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/delivery_boys/$(request.auth.token.email))
       );
     }
 
@@ -93,15 +103,27 @@ service cloud.firestore {
              data.customerPhone is string && data.customerPhone.size() >= 10 && data.customerPhone.size() <= 30 &&
              data.orderType is string && (data.orderType == 'takeaway' || data.orderType == 'delivery' || data.orderType == 'dine_in') &&
              data.totalAmount is number && data.totalAmount >= 0 &&
-             data.status is string && (data.status == 'pending' || data.status == 'confirmed' || data.status == 'preparing' || data.status == 'completed' || data.status == 'cancelled') &&
+             data.status is string && (data.status == 'pending' || data.status == 'confirmed' || data.status == 'preparing' || data.status == 'out_for_delivery' || data.status == 'delivered' || data.status == 'completed' || data.status == 'cancelled') &&
              data.createdAt is string && data.createdAt.size() <= 100;
     }
 
     match /orders/{orderId} {
-      allow read: if isAdmin();
-      allow create: if isValidId(orderId) && isValidOrder(incoming()) && incoming().status == 'pending';
-      allow update: if isAdmin() && isValidId(orderId) && isValidOrder(incoming()) && incoming().createdAt == existing().createdAt;
+      allow read: if isAdmin() || isDeliveryBoy();
+      allow create: if isValidId(orderId) && isValidOrder(incoming()) && (incoming().status == 'pending' || (isAdmin() && incoming().status == 'confirmed'));
+      allow update: if (isAdmin() && isValidId(orderId) && isValidOrder(incoming()) && incoming().createdAt == existing().createdAt) ||
+                     (isDeliveryBoy() && isValidId(orderId) && isValidOrder(incoming()) &&
+                      existing().status != 'cancelled' &&
+                      (incoming().status == 'delivered' || incoming().status == 'out_for_delivery') &&
+                      incoming().totalAmount == existing().totalAmount &&
+                      incoming().createdAt == existing().createdAt &&
+                      incoming().customerPhone == existing().customerPhone);
       allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // Delivery Boys collection
+    match /delivery_boys/{boyId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == boyId);
+      allow write: if isAdmin() && isValidId(boyId);
     }
 
     // Gallery

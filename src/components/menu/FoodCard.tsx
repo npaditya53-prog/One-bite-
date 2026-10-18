@@ -1,7 +1,7 @@
-import React from 'react';
-import { MenuItem } from '../../types/index.ts';
+import React, { useState, useMemo } from 'react';
+import { MenuItem, MenuVariant } from '../../types/index.ts';
 import { FoodTypeBadge } from '../common/FoodTypeBadge.tsx';
-import { Flame, Eye, Plus, Minus, ShoppingBag, SlidersHorizontal } from 'lucide-react';
+import { Flame, Eye, Plus, Minus, ShoppingBag, Check } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { useToast } from '../common/Toast.tsx';
 import { getBestOfferForItem } from '../../utils/offerUtils.ts';
@@ -13,47 +13,68 @@ interface FoodCardProps {
 }
 
 export function FoodCard({ item, onSelect }: FoodCardProps) {
-  const { addToCart, updateCartQuantity, cart, activeOffers } = useRestaurant();
+  const { addToCart, cart, activeOffers } = useRestaurant();
   const { showToast } = useToast();
-  const [localQty, setLocalQty] = React.useState(1);
+  const [localQty, setLocalQty] = useState(1);
 
   const hasVariants = Boolean(item.variants && item.variants.length > 0);
-  const cartEntry = cart.find(ci => ci.menuItemId === item.id && !ci.variant);
-  const inCartQty = cartEntry?.quantity || 0;
+
+  // Initialize selected variant to the first available variant
+  const [selectedVariant, setSelectedVariant] = useState<MenuVariant | undefined>(() => {
+    if (item.variants && item.variants.length > 0) {
+      return item.variants.find(v => v.available) || item.variants[0];
+    }
+    return undefined;
+  });
 
   // Dynamic Offer check
-  const bestOffer = React.useMemo(() => {
+  const bestOffer = useMemo(() => {
     return getBestOfferForItem(item, activeOffers);
   }, [item, activeOffers]);
 
-  // Price calculations
-  let minVariantPrice = 0;
-  if (hasVariants && item.variants) {
-    const numericPrices = item.variants
-      .map(v => (typeof v.price === 'number' ? v.price : 999))
-      .filter(p => p !== 999);
-    minVariantPrice = numericPrices.length > 0 ? Math.min(...numericPrices) : 0;
-  }
-
+  // Price calculations based on selected variant or base price
   const isMRP = item.price === 'MRP';
-  const effectiveCurrentPrice = bestOffer
-    ? bestOffer.discountedPrice
-    : (item.discountPrice ?? item.price);
-  const effectiveOriginalPrice = bestOffer
-    ? bestOffer.originalPrice
-    : (item.discountPrice ? item.price : null);
+  
+  const displayPrice = useMemo(() => {
+    if (selectedVariant) {
+      return selectedVariant.price === 'MRP' ? 'MRP' : selectedVariant.price;
+    }
+    if (bestOffer) {
+      return bestOffer.discountedPrice;
+    }
+    return item.discountPrice ?? item.price;
+  }, [selectedVariant, bestOffer, item]);
 
-  const handleQuickAdd = (e: React.MouseEvent) => {
+  const originalPrice = useMemo(() => {
+    if (selectedVariant) return null;
+    if (bestOffer) return bestOffer.originalPrice;
+    return item.discountPrice ? item.price : null;
+  }, [selectedVariant, bestOffer, item]);
+
+  // Check how many of this item + variant are currently in cart
+  const inCartQty = useMemo(() => {
+    const entry = cart.find(ci => {
+      if (ci.menuItemId !== item.id) return false;
+      if (selectedVariant) {
+        return ci.variant?.id === selectedVariant.id;
+      }
+      return !ci.variant;
+    });
+    return entry?.quantity || 0;
+  }, [cart, item.id, selectedVariant]);
+
+  const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!item.available) return;
 
-    if (hasVariants) {
-      onSelect(item);
+    if (hasVariants && !selectedVariant) {
+      showToast('Please select a size first', 'error');
       return;
     }
 
-    addToCart(item, undefined, [], 1);
-    showToast(`Added ${item.name} to cart!`, 'success');
+    addToCart(item, selectedVariant, [], localQty);
+    const variantTag = selectedVariant ? ` (${selectedVariant.name})` : '';
+    showToast(`Added ${localQty}x ${item.name}${variantTag} to cart!`, 'success');
   };
 
   return (
@@ -138,32 +159,71 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
           </p>
         </div>
 
+        {/* Genuine Size / Variant Selector (Only when item has variants) */}
+        {hasVariants && item.variants && item.variants.length > 0 && (
+          <div className="mb-3 pt-2.5 border-t border-stone-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-bold text-stone-600 uppercase tracking-wider">
+                Size:
+              </span>
+              {selectedVariant && (
+                <span className="text-[11px] font-extrabold text-amber-700">
+                  {selectedVariant.name}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {item.variants.map(v => {
+                const isSelected = selectedVariant?.id === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedVariant(v);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      isSelected
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'bg-stone-100 text-stone-700 hover:bg-stone-200 hover:text-stone-950'
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3 h-3 text-white" />}
+                    <span>{v.name}</span>
+                    <span className={`text-[10px] ${isSelected ? 'text-amber-100' : 'text-stone-500'}`}>
+                      {v.price === 'MRP' ? 'MRP' : `₹${v.price}`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Price & Action row */}
-        <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-2 mt-auto">
+        <div className="pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2 mt-auto">
           <div>
             <div className="flex items-baseline gap-1">
-              {hasVariants ? (
-                <>
-                  <span className="text-xs text-stone-500 font-medium">From</span>
-                  <span className="text-lg font-extrabold text-stone-950">₹{minVariantPrice}</span>
-                </>
-              ) : isMRP ? (
+              {isMRP ? (
                 <span className="text-base font-extrabold text-stone-950">MRP</span>
               ) : (
                 <>
-                  <span className="text-lg font-extrabold text-stone-950">₹{effectiveCurrentPrice}</span>
-                  {effectiveOriginalPrice && (
+                  <span className="text-lg font-black text-stone-950">
+                    {typeof displayPrice === 'number' ? `₹${displayPrice}` : displayPrice}
+                  </span>
+                  {originalPrice && (
                     <span className="text-xs text-stone-400 line-through font-medium ml-1">
-                      ₹{effectiveOriginalPrice}
+                      ₹{originalPrice}
                     </span>
                   )}
                 </>
               )}
             </div>
 
-            {hasVariants ? (
-              <span className="text-[11px] text-amber-700 font-semibold block">
-                {item.variants?.length} sizes available
+            {inCartQty > 0 ? (
+              <span className="text-[11px] text-emerald-700 font-bold block">
+                {inCartQty} in cart
               </span>
             ) : item.servingInfo ? (
               <span className="text-[11px] text-stone-500 block truncate max-w-[130px]">
@@ -172,73 +232,49 @@ export function FoodCard({ item, onSelect }: FoodCardProps) {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {item.available ? (
-              hasVariants ? (
-                <button
-                  type="button"
-                  onClick={() => onSelect(item)}
-                  className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md cursor-pointer"
-                  title="Choose your preferred size or variation"
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>Choose Size</span>
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <div className="flex items-center bg-stone-100 border border-stone-200/90 rounded-lg p-0.5">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (inCartQty > 0 && cartEntry) {
-                          updateCartQuantity(cartEntry.id, -1);
-                        } else {
-                          setLocalQty(q => Math.max(1, q - 1));
-                        }
-                      }}
-                      className="w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-950 hover:bg-white rounded-md transition-colors cursor-pointer"
-                      aria-label="Decrease quantity"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="w-6 text-center text-xs font-extrabold text-stone-900">
-                      {inCartQty > 0 ? inCartQty : localQty}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (inCartQty > 0 && cartEntry) {
-                          updateCartQuantity(cartEntry.id, 1);
-                        } else {
-                          setLocalQty(q => q + 1);
-                        }
-                      }}
-                      className="w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-950 hover:bg-white rounded-md transition-colors cursor-pointer"
-                      aria-label="Increase quantity"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-
+              <>
+                {/* Quantity Controls */}
+                <div className="flex items-center bg-stone-100 border border-stone-200/90 rounded-xl p-0.5">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!item.available) return;
-                      const addCount = inCartQty > 0 ? 1 : localQty;
-                      addToCart(item, undefined, [], addCount);
-                      showToast(`Added ${addCount}x ${item.name} to cart!`, 'success');
+                      setLocalQty(q => Math.max(1, q - 1));
                     }}
-                    className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md cursor-pointer shrink-0"
-                    title="Add to order cart"
+                    className="w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-950 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                    aria-label="Decrease quantity"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{inCartQty > 0 ? 'Add More' : 'Add to Cart'}</span>
+                    <Minus className="w-3 h-3" />
+                  </button>
+                  <span className="w-6 text-center text-xs font-black text-stone-900">
+                    {localQty}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLocalQty(q => q + 1);
+                    }}
+                    className="w-7 h-7 flex items-center justify-center text-stone-700 hover:text-stone-950 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="w-3 h-3" />
                   </button>
                 </div>
-              )
+
+                {/* Add to Cart Button */}
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="inline-flex items-center gap-1.5 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md cursor-pointer shrink-0"
+                  title="Add to order cart"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>ADD TO CART</span>
+                </button>
+              </>
             ) : (
               <span className="text-xs font-medium text-stone-400 py-1.5 px-2 bg-stone-100 rounded-lg">
                 Unavailable

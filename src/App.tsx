@@ -23,6 +23,9 @@ import { PrivacyPolicyPage } from './components/legal/PrivacyPolicyPage.tsx';
 import { TermsConditionsPage } from './components/legal/TermsConditionsPage.tsx';
 import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
 import { AlertCircle } from 'lucide-react';
+import { initGlobalButtonSound } from './utils/sound.ts';
+import { OrderSuccessModal } from './components/common/OrderSuccessModal.tsx';
+import { deliveryAuthStorage } from './services/api.ts';
 
 const AdminLayout = React.lazy(() =>
   import('./components/admin/AdminLayout.tsx').then(m => ({ default: m.AdminLayout }))
@@ -30,9 +33,17 @@ const AdminLayout = React.lazy(() =>
 const AdminLogin = React.lazy(() =>
   import('./components/admin/AdminLogin.tsx').then(m => ({ default: m.AdminLogin }))
 );
+const DeliveryDashboard = React.lazy(() =>
+  import('./components/delivery/DeliveryDashboard.tsx').then(m => ({ default: m.DeliveryDashboard }))
+);
+const DeliveryLogin = React.lazy(() =>
+  import('./components/delivery/DeliveryLogin.tsx').then(m => ({ default: m.DeliveryLogin }))
+);
 
 function pathToView(pathname: string): string {
   if (pathname.startsWith('/admin')) return 'admin';
+  if (pathname.startsWith('/delivery-login')) return 'delivery-login';
+  if (pathname.startsWith('/delivery-dashboard') || pathname.startsWith('/delivery')) return 'delivery-dashboard';
   if (pathname === '/' || pathname === '') return 'home';
   if (pathname === '/menu') return 'menu';
   if (pathname === '/checkout') return 'checkout';
@@ -49,6 +60,8 @@ function pathToView(pathname: string): string {
 function viewToPath(view: string): string {
   if (view === 'home') return '/';
   if (view === 'admin') return '/admin';
+  if (view === 'delivery-login') return '/delivery-login';
+  if (view === 'delivery-dashboard') return '/delivery-dashboard';
   if (view === 'checkout') return '/checkout';
   if (view === 'privacy') return '/privacy';
   if (view === 'terms') return '/terms';
@@ -57,10 +70,26 @@ function viewToPath(view: string): string {
 }
 
 function MainContent() {
-  const { settings, isLoading, error, isAdmin, refreshData } = useRestaurant();
+  const {
+    settings,
+    isLoading,
+    error,
+    isAdmin,
+    refreshData,
+    celebrationOrder,
+    celebrationWhatsappUrl,
+    dismissOrderCelebration,
+    setIsCartOpen,
+  } = useRestaurant();
   const [currentView, setCurrentView] = useState<string>(() => {
     return pathToView(window.location.pathname);
   });
+
+  // Initialize subtle pop sound on button clicks across the site
+  useEffect(() => {
+    const cleanup = initGlobalButtonSound();
+    return cleanup;
+  }, []);
 
   // Dynamic Page Titles and Meta Descriptions
   useEffect(() => {
@@ -151,6 +180,14 @@ function MainContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleContinueBrowsing = () => {
+    dismissOrderCelebration();
+    setIsCartOpen(false);
+    if (currentView === 'checkout') {
+      navigateTo('menu');
+    }
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -208,6 +245,38 @@ function MainContent() {
     );
   }
 
+  // Delivery Boy Portal View (/delivery-login, /delivery-dashboard, /delivery)
+  if (currentView === 'delivery-login' || currentView === 'delivery-dashboard') {
+    const deliveryFallback = (
+      <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center text-white p-4">
+        <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-3" />
+        <span className="text-xs text-stone-400">Loading Delivery Boy Panel...</span>
+      </div>
+    );
+
+    const hasDeliveryToken = Boolean(deliveryAuthStorage.getToken());
+
+    if (currentView === 'delivery-dashboard' && hasDeliveryToken) {
+      return (
+        <React.Suspense fallback={deliveryFallback}>
+          <DeliveryDashboard
+            onLogout={() => navigateTo('delivery-login')}
+            onViewLiveSite={() => navigateTo('home')}
+          />
+        </React.Suspense>
+      );
+    }
+
+    return (
+      <React.Suspense fallback={deliveryFallback}>
+        <DeliveryLogin
+          onSuccess={() => navigateTo('delivery-dashboard')}
+          onBackToSite={() => navigateTo('home')}
+        />
+      </React.Suspense>
+    );
+  }
+
   const enabled = settings.sectionsEnabled || {
     hero: true,
     quickActions: true,
@@ -233,12 +302,21 @@ function MainContent() {
         {/* VIEW: HOME */}
         {currentView === 'home' && (
           <>
-            {enabled.hero && <Hero onNavigateToMenu={() => navigateTo('menu')} />}
+            {enabled.hero && (
+              <Hero
+                onNavigateToMenu={() => navigateTo('menu')}
+                onNavigateToCheckout={() => navigateTo('checkout')}
+              />
+            )}
             {enabled.offers && <OffersSection />}
             {enabled.popularItems && (
               <PopularPicks onViewAllMenu={() => navigateTo('menu')} />
             )}
-            {enabled.menu && <MenuSection />}
+            {enabled.menu && (
+              <MenuSection
+                onNavigateToCheckout={() => navigateTo('checkout')}
+              />
+            )}
             {enabled.about && <AboutSection />}
             {enabled.whyChooseUs && <WhyChooseUs />}
             {enabled.gallery && <GallerySection />}
@@ -250,7 +328,10 @@ function MainContent() {
 
         {/* VIEW: MENU */}
         {currentView === 'menu' && (
-          <MenuSection isStandalonePage />
+          <MenuSection
+            isStandalonePage
+            onNavigateToCheckout={() => navigateTo('checkout')}
+          />
         )}
 
         {/* VIEW: ABOUT */}
@@ -321,6 +402,15 @@ function MainContent() {
 
       {/* Cart & Pay on Delivery Drawer */}
       <CartDrawer />
+
+      {/* Order Success Celebration Modal */}
+      <OrderSuccessModal
+        isOpen={Boolean(celebrationOrder)}
+        order={celebrationOrder}
+        whatsappUrl={celebrationWhatsappUrl}
+        onClose={dismissOrderCelebration}
+        onContinueBrowsing={handleContinueBrowsing}
+      />
     </div>
   );
 }

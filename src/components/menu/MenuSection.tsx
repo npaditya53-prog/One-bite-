@@ -3,18 +3,23 @@ import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { FoodCard } from './FoodCard.tsx';
 import { FoodDetailsModal } from './FoodDetailsModal.tsx';
 import { MenuItem } from '../../types/index.ts';
-import { Search, UtensilsCrossed, Sparkles } from 'lucide-react';
+import { Search, UtensilsCrossed, Sparkles, ShoppingBag, ArrowRight } from 'lucide-react';
 
 interface MenuSectionProps {
   id?: string;
   isStandalonePage?: boolean;
+  onNavigateToCheckout?: () => void;
 }
 
 type DietaryFilter = 'all' | 'veg' | 'non_veg';
 type PriceFilter = 'all' | 'under_100' | '100_200' | 'above_200';
 
-export function MenuSection({ id = 'menu', isStandalonePage = false }: MenuSectionProps) {
-  const { categories, menuItems } = useRestaurant();
+export function MenuSection({
+  id = 'menu',
+  isStandalonePage = false,
+  onNavigateToCheckout,
+}: MenuSectionProps) {
+  const { categories, menuItems, cart, cartTotal, setIsCartOpen } = useRestaurant();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [dietaryFilter, setDietaryFilter] = useState<DietaryFilter>('all');
@@ -100,6 +105,50 @@ export function MenuSection({ id = 'menu', isStandalonePage = false }: MenuSecti
             Every dish is prepared fresh on order with signature seasonings, pure dairy mozzarella, and authentic franchise quality.
           </p>
         </div>
+
+        {/* Live Order Now Banner when Cart has Items */}
+        {cart.length > 0 && (
+          <div className="bg-gradient-to-r from-amber-600 to-amber-700 text-white rounded-2xl p-4 mb-6 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white text-stone-950 flex items-center justify-center font-black text-sm shadow-xs shrink-0">
+                {cart.length}
+              </div>
+              <div>
+                <p className="text-sm font-black">
+                  {cart.length} {cart.length === 1 ? 'item' : 'items'} in your cart • Total: ₹{cartTotal}
+                </p>
+                <p className="text-xs text-amber-100">
+                  Pay on Delivery (Cash or QR) • Home delivery available in Motihari
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setIsCartOpen(true)}
+                className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-stone-950/40 hover:bg-stone-950/60 text-white text-xs font-bold transition-all cursor-pointer"
+              >
+                View Cart
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onNavigateToCheckout) {
+                    onNavigateToCheckout();
+                  } else {
+                    setIsCartOpen(true);
+                  }
+                }}
+                className="flex-1 sm:flex-none px-5 py-2 rounded-xl bg-white text-amber-700 hover:bg-amber-50 active:bg-amber-100 text-xs font-extrabold shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>ORDER NOW</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filter & Search Bar */}
         <div className="bg-white p-4 sm:p-5 rounded-3xl border border-stone-200/90 shadow-sm mb-8 space-y-4">

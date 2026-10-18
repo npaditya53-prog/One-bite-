@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { OneBiteLogo } from '../common/OneBiteLogo.tsx';
 import { Menu, X, Phone, ShoppingBag, Shield, ArrowRight } from 'lucide-react';
+import { SoundToggle } from '../common/SoundToggle.tsx';
 
 interface NavbarProps {
   currentView: string;
@@ -123,50 +124,61 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
               </a>
             )}
 
+            {/* Sound Effects Mute / Unmute Toggle */}
+            <SoundToggle showLabel />
+
+            {/* Cart Button */}
             <button
               type="button"
               onClick={() => setIsCartOpen(true)}
-              className="relative inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs sm:text-sm font-bold shadow-sm transition-all cursor-pointer"
-              title="Open Cart & Checkout"
+              className="relative inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs sm:text-sm font-bold border border-stone-800 transition-all cursor-pointer"
+              title="Open Cart & Review Items"
             >
-              <ShoppingBag className="w-4 h-4" />
+              <ShoppingBag className="w-4 h-4 text-amber-400" />
               <span>Cart</span>
               {cart.length > 0 && (
-                <span className="ml-1 bg-white text-stone-950 font-black text-[10px] px-1.5 py-0.2 rounded-full">
+                <span className="ml-1 bg-amber-600 text-white font-black text-[10px] px-1.5 py-0.2 rounded-full">
                   {cart.length}
                 </span>
               )}
             </button>
 
-            <a
-              href="/admin"
-              onClick={(e) => {
-                e.preventDefault();
-                handleLinkClick('admin');
-              }}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs sm:text-sm font-semibold border border-stone-800 transition-colors cursor-pointer"
-              title="Admin Login & Management"
-            >
-              <Shield className="w-4 h-4 text-amber-400" />
-              <span>Admin</span>
-            </a>
-          </div>
-
-          {/* Mobile & Tablet Right Controls (< 1024px): Phone + Cart + Admin + Hamburger */}
-          <div className="flex lg:hidden items-center gap-1.5">
+            {/* ADMIN LOGIN Button */}
             <button
               type="button"
-              onClick={() => setIsCartOpen(true)}
-              className="relative p-2 rounded-lg bg-amber-600 active:bg-amber-700 text-white shadow-xs cursor-pointer"
-              aria-label="Open Cart"
-              title="Cart & Checkout"
+              onClick={() => onNavigate('admin')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white text-xs sm:text-sm font-black shadow-md transition-all cursor-pointer"
+              title="Admin Portal Login"
             >
-              <ShoppingBag className="w-4 h-4" />
-              {cart.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-white text-stone-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
-                  {cart.length}
-                </span>
-              )}
+              <Shield className="w-4 h-4" />
+              <span>ADMIN LOGIN</span>
+            </button>
+
+            {isAdmin && (
+              <button
+                onClick={() => handleLinkClick('admin')}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-950/60 text-amber-300 border border-amber-800/80 hover:bg-amber-900/60 text-xs font-semibold transition-colors cursor-pointer"
+                title="Admin Panel"
+              >
+                <Shield className="w-3.5 h-3.5 text-amber-400" />
+                <span>Admin CMS</span>
+              </button>
+            )}
+          </div>
+
+          {/* Mobile & Tablet Right Controls (< 1024px) */}
+          <div className="flex lg:hidden items-center gap-1.5">
+            <SoundToggle />
+
+            <button
+              type="button"
+              onClick={() => onNavigate('admin')}
+              className="px-2.5 py-1.5 rounded-lg bg-amber-600 active:bg-amber-700 text-white text-xs font-extrabold flex items-center gap-1 shadow-xs cursor-pointer"
+              aria-label="Admin Login"
+              title="Admin Login"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>ADMIN LOGIN</span>
             </button>
 
             {settings.phone && (
@@ -210,16 +222,18 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
               </button>
             ))}
 
-            <button
-              onClick={() => handleLinkClick('admin')}
-              className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-amber-400 hover:bg-stone-900 flex items-center justify-between cursor-pointer"
-            >
-              <span className="flex items-center gap-2">
-                <Shield className="w-4 h-4" />
-                <span>Admin CMS Portal</span>
-              </span>
-              <ArrowRight className="w-4 h-4 opacity-40" />
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => handleLinkClick('admin')}
+                className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-amber-400 hover:bg-stone-900 flex items-center justify-between cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <Shield className="w-4 h-4" />
+                  <span>Admin CMS Portal</span>
+                </span>
+                <ArrowRight className="w-4 h-4 opacity-40" />
+              </button>
+            )}
           </div>
 
           <div className="pt-4 border-t border-stone-800/80 flex flex-col gap-3 text-xs text-stone-400">

@@ -2,6 +2,7 @@ import { DatabaseSchema, SiteSettings, Category, MenuItem, GalleryItem, ReviewIt
 import { initialData } from '../data/initialData.ts';
 
 const TOKEN_KEY = 'onebite_admin_token';
+const DELIVERY_TOKEN_KEY = 'onebite_delivery_token';
 
 export const authStorage = {
   getToken: () => localStorage.getItem(TOKEN_KEY) || '',
@@ -9,8 +10,20 @@ export const authStorage = {
   clearToken: () => localStorage.removeItem(TOKEN_KEY),
 };
 
+export const deliveryAuthStorage = {
+  getToken: () => localStorage.getItem(DELIVERY_TOKEN_KEY) || '',
+  setToken: (token: string) => localStorage.setItem(DELIVERY_TOKEN_KEY, token),
+  clearToken: () => localStorage.removeItem(DELIVERY_TOKEN_KEY),
+};
+
 const getAuthHeaders = (): Record<string, string> => {
   const token = authStorage.getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const getDeliveryAuthHeaders = (): Record<string, string> => {
+  const deliveryToken = deliveryAuthStorage.getToken();
+  const token = deliveryToken || authStorage.getToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -26,7 +39,7 @@ export const api = {
     }
   },
 
-  async login(email: string, pass: string): Promise<{ token: string; user: { email: string; role: string } }> {
+  async login(email: string, pass: string): Promise<{ token: string; user: { email?: string; phone?: string; role: string } }> {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -39,6 +52,121 @@ export const api = {
     const data = await res.json();
     authStorage.setToken(data.token);
     return data;
+  },
+
+  async sendLoginLink(email: string, role: 'admin' | 'delivery'): Promise<{ success: boolean; message: string; directLink?: string }> {
+    const res = await fetch('/api/auth/send-login-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role }),
+    });
+    const data = await res.json().catch(() => ({ error: 'Failed to dispatch login link' }));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to dispatch login link');
+    }
+    return data;
+  },
+
+  async verifyLoginLink(token: string): Promise<{ success: boolean; token: string; role: 'admin' | 'delivery'; user: any }> {
+    const res = await fetch('/api/auth/verify-login-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json().catch(() => ({ error: 'Invalid or expired login link' }));
+    if (!res.ok) {
+      throw new Error(data.error || 'Invalid or expired login link');
+    }
+    if (data.role === 'delivery') {
+      deliveryAuthStorage.setToken(data.token);
+    } else {
+      authStorage.setToken(data.token);
+    }
+    return data;
+  },
+
+  async checkAdminPhone(phone: string): Promise<{ authorized: boolean; phone?: string }> {
+    const res = await fetch('/api/auth/check-admin-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    const data = await res.json().catch(() => ({ error: 'Verification failed' }));
+    if (!res.ok) {
+      throw new Error(data.error || 'Access Denied: Not an authorized administrator mobile number.');
+    }
+    return data;
+  },
+
+  async sendOtp(phone: string): Promise<{ success: boolean; message: string; expiresInSeconds?: number }> {
+    const res = await fetch('/api/auth/send-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to send OTP' }));
+      throw new Error(err.error || 'Failed to send OTP');
+    }
+    return await res.json();
+  },
+
+  async verifyOtp(phone: string, otp: string): Promise<{ token: string; user: { phone: string; role: string } }> {
+    const res = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, otp }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'OTP verification failed' }));
+      throw new Error(err.error || 'Invalid or expired OTP');
+    }
+    const data = await res.json();
+    authStorage.setToken(data.token);
+    return data;
+  },
+
+  async loginPhone(phone: string, firebaseUid?: string): Promise<{ token: string; user: { phone: string; role: string } }> {
+    const res = await fetch('/api/auth/login-phone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, firebaseUid }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Phone authorization failed' }));
+      throw new Error(err.error || 'Unauthorized admin mobile number');
+    }
+    const data = await res.json();
+    authStorage.setToken(data.token);
+    return data;
+  },
+
+  async loginFirebaseUser(email?: string, phone?: string): Promise<{ token: string; user: { identifier: string; role: string } }> {
+    const res = await fetch('/api/auth/login-firebase-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, phone }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Authorization failed' }));
+      throw new Error(err.error || 'Access Denied: This account is not an authorized administrator.');
+    }
+    const data = await res.json();
+    authStorage.setToken(data.token);
+    return data;
+  },
+
+  async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to request password reset' }));
+      throw new Error(err.error || 'Failed to request password reset');
+    }
+    return await res.json();
   },
 
   async checkAuth(): Promise<boolean> {
@@ -358,6 +486,36 @@ export const api = {
     return await res.json();
   },
 
+  async assignOrder(id: string): Promise<CustomerOrder> {
+    const res = await fetch(`/api/orders/${id}/assign`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to assign order' }));
+      throw new Error(err.error || 'Failed to assign order');
+    }
+    return await res.json();
+  },
+
+  async unassignOrder(id: string): Promise<CustomerOrder> {
+    const res = await fetch(`/api/orders/${id}/unassign`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to unassign order' }));
+      throw new Error(err.error || 'Failed to unassign order');
+    }
+    return await res.json();
+  },
+
   async updateBusinessHours(hours: BusinessDayHours[]): Promise<BusinessDayHours[]> {
     const res = await fetch('/api/hours', {
       method: 'PUT',
@@ -434,5 +592,105 @@ export const api = {
     if (!res.ok) {
       throw new Error('Failed to reset data');
     }
+  },
+
+  // Delivery Boy API Methods
+  async deliveryLogin(identifier: string, pass: string): Promise<{ token: string; user: { identifier: string; role: string } }> {
+    const res = await fetch('/api/delivery/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, password: pass }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Login failed' }));
+      throw new Error(err.error || 'Invalid delivery credentials');
+    }
+    const data = await res.json();
+    deliveryAuthStorage.setToken(data.token);
+    return data;
+  },
+
+  async loginDeliveryFirebaseUser(email?: string): Promise<{ token: string; user: { identifier: string; role: string } }> {
+    const res = await fetch('/api/delivery/login-firebase-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Delivery authorization failed' }));
+      throw new Error(err.error || 'Unauthorized delivery account');
+    }
+    const data = await res.json();
+    deliveryAuthStorage.setToken(data.token);
+    return data;
+  },
+
+  async checkDeliveryAuth(): Promise<boolean> {
+    const token = deliveryAuthStorage.getToken();
+    if (!token) return false;
+    try {
+      const res = await fetch('/api/delivery/check', {
+        headers: getDeliveryAuthHeaders(),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return Boolean(data.authenticated);
+    } catch {
+      return false;
+    }
+  },
+
+  async getDeliveryOrders(): Promise<CustomerOrder[]> {
+    const res = await fetch('/api/delivery/orders', {
+      headers: getDeliveryAuthHeaders(),
+    });
+    if (!res.ok) {
+      const fallbackRes = await fetch('/api/orders', {
+        headers: getDeliveryAuthHeaders(),
+      });
+      if (!fallbackRes.ok) return [];
+      return await fallbackRes.json();
+    }
+    return await res.json();
+  },
+
+  async startOrderDelivery(id: string): Promise<CustomerOrder> {
+    const res = await fetch(`/api/delivery/orders/${id}/start`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getDeliveryAuthHeaders(),
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to start delivery' }));
+      throw new Error(err.error || 'Failed to start delivery');
+    }
+    return await res.json();
+  },
+
+  async confirmOrderDelivered(id: string): Promise<CustomerOrder> {
+    const res = await fetch(`/api/delivery/orders/${id}/deliver`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getDeliveryAuthHeaders(),
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to confirm delivery' }));
+      throw new Error(err.error || 'Failed to confirm delivery');
+    }
+    return await res.json();
+  },
+
+  async deliveryLogout(): Promise<void> {
+    try {
+      await fetch('/api/delivery/logout', {
+        method: 'POST',
+        headers: getDeliveryAuthHeaders(),
+      });
+    } catch {}
+    deliveryAuthStorage.clearToken();
   },
 };

@@ -307,7 +307,7 @@ export function AdminSettings() {
                 type="url"
                 value={formData.orderUrl}
                 onChange={e => handleChange('orderUrl', e.target.value)}
-                placeholder="https://wa.me/919123456789 or Zomato/Swiggy link"
+                placeholder="Ordering link or WhatsApp link"
                 className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
               />
             </div>
@@ -355,7 +355,7 @@ export function AdminSettings() {
                   min="0"
                   value={formData.freeDeliveryThreshold ?? 0}
                   onChange={e => handleChange('freeDeliveryThreshold', Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="e.g. 499"
+                  placeholder="Order amount for free delivery"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                 />
                 <span className="text-[10px] text-stone-500 mt-0.5 block">Orders above this get free delivery</span>

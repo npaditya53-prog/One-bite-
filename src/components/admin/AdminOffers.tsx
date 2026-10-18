@@ -679,7 +679,7 @@ export function AdminOffers() {
                   required
                   value={editingOffer.title || ''}
                   onChange={e => setEditingOffer({ ...editingOffer, title: e.target.value })}
-                  placeholder="e.g. Navratri Special Offer, Weekend Burger Combo"
+                  placeholder="Offer title"
                   className="w-full px-3.5 py-2.5 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
               </div>
@@ -694,7 +694,7 @@ export function AdminOffers() {
                   required
                   value={editingOffer.description || ''}
                   onChange={e => setEditingOffer({ ...editingOffer, description: e.target.value })}
-                  placeholder="e.g. Save on vegetarian favourites across Motihari with exclusive festive discount!"
+                  placeholder="Offer description and highlights"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
               </div>
@@ -763,7 +763,7 @@ export function AdminOffers() {
                             discount: badge,
                           });
                         }}
-                        placeholder={editingOffer.offerType === 'percentage' ? '10 (for 10%)' : '50 (for ₹50)'}
+                        placeholder={editingOffer.offerType === 'percentage' ? 'Discount percentage' : 'Discount amount'}
                         className="w-full px-3.5 py-2.5 bg-white border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                       />
                       <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-stone-400">
@@ -781,7 +781,7 @@ export function AdminOffers() {
                     type="text"
                     value={editingOffer.discount || ''}
                     onChange={e => setEditingOffer({ ...editingOffer, discount: e.target.value })}
-                    placeholder="e.g. 10% OFF, FLAT ₹50 OFF"
+                    placeholder="Badge text"
                     className="w-full px-3.5 py-2 bg-white border border-stone-200 rounded-xl text-xs sm:text-sm font-bold text-amber-700 focus:outline-none"
                   />
                 </div>
@@ -1021,7 +1021,7 @@ export function AdminOffers() {
                     onChange={e =>
                       setEditingOffer({ ...editingOffer, code: e.target.value.toUpperCase() })
                     }
-                    placeholder="e.g. NAVRATRI10, ONEBITE50"
+                    placeholder="Coupon code"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-xs sm:text-sm font-mono uppercase focus:outline-none"
                   />
                 </div>
@@ -1040,7 +1040,7 @@ export function AdminOffers() {
                         minOrderValue: e.target.value === '' ? undefined : Number(e.target.value),
                       })
                     }
-                    placeholder="e.g. 199"
+                    placeholder="Minimum order amount"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none"
                   />
                 </div>
@@ -1055,7 +1055,7 @@ export function AdminOffers() {
                   type="text"
                   value={editingOffer.terms || ''}
                   onChange={e => setEditingOffer({ ...editingOffer, terms: e.target.value })}
-                  placeholder="e.g. Valid on dine-in and takeaway. Cannot be combined with other offers."
+                  placeholder="Terms and conditions"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-xs sm:text-sm focus:outline-none"
                 />
               </div>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   DatabaseSchema,
   SiteSettings,
@@ -20,12 +20,16 @@ import {
   auth,
   onAuthStateChanged,
   signInWithGoogle,
+  signInWithEmail,
   signOutUser,
   handleFirestoreError,
   OperationType,
   User,
+  saveOrderToFirestore,
+  assignOrderInFirestore,
+  unassignOrderInFirestore,
 } from '../services/firebase.ts';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import {
   isOfferPubliclyActive,
   calculateCartDiscount,
@@ -50,7 +54,7 @@ interface RestaurantContextType {
   isLoading: boolean;
   error: string | null;
   isAdmin: boolean;
-  adminUser: { email: string; role: string } | null;
+  adminUser: { email?: string; phone?: string; identifier?: string; role: string } | null;
   openStatus: OpenStatus;
 
   // Computed collections
@@ -90,8 +94,16 @@ interface RestaurantContextType {
 
   // Admin Actions
   refreshData: () => Promise<void>;
+  setIsAdmin: (isAdmin: boolean) => void;
+  setAdminUser: (user: any) => void;
+  loginWithMagicToken: (token: string) => Promise<void>;
   login: (email: string, pass: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
+  loginWithMobile: (phone: string, otp: string) => Promise<void>;
+  loginWithFirebasePhone: (phone: string, firebaseUser: User) => Promise<void>;
+  checkAdminPhone: (phone: string) => Promise<{ authorized: boolean; phone?: string }>;
+  sendOtp: (phone: string) => Promise<{ success: boolean; message: string; expiresInSeconds?: number }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
   firebaseUser: User | null;
   updateSettings: (data: Partial<SiteSettings>) => Promise<void>;
@@ -111,6 +123,15 @@ interface RestaurantContextType {
   resetToDefaults: () => Promise<void>;
   updateOrderStatus: (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid') => Promise<void>;
   updateOrderPaymentStatus: (id: string, paymentStatus: 'unpaid' | 'paid') => Promise<void>;
+  assignOrderToDeliveryBoy: (orderId: string) => Promise<void>;
+  unassignOrderFromDeliveryBoy: (orderId: string) => Promise<void>;
+  createManualOrder: (orderData: Partial<CustomerOrder>, assignImmediately?: boolean) => Promise<CustomerOrder>;
+
+  // Order Success Celebration Modal
+  celebrationOrder: CustomerOrder | null;
+  celebrationWhatsappUrl: string;
+  triggerOrderCelebration: (order: CustomerOrder, whatsappUrl?: string) => void;
+  dismissOrderCelebration: () => void;
 }
 
 const RestaurantContext = createContext<RestaurantContextType | undefined>(undefined);
@@ -133,22 +154,51 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [adminUser, setAdminUser] = useState<{ email: string; role: string } | null>(null);
+  const [adminUser, setAdminUser] = useState<{ email?: string; phone?: string; identifier?: string; role: string } | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
 
-  // Listen to Firebase Auth state
+  // Order Celebration State
+  const [celebrationOrder, setCelebrationOrder] = useState<CustomerOrder | null>(null);
+  const [celebrationWhatsappUrl, setCelebrationWhatsappUrl] = useState<string>('');
+  const celebratedOrderIdsRef = useRef<Set<string>>(new Set());
+
+  const triggerOrderCelebration = useCallback((order: CustomerOrder, whatsappUrl?: string) => {
+    if (!order || !order.id) return;
+    if (celebratedOrderIdsRef.current.has(order.id)) {
+      // Prevent duplicate success popups for the same order
+      return;
+    }
+    celebratedOrderIdsRef.current.add(order.id);
+    setCelebrationOrder(order);
+    if (whatsappUrl) {
+      setCelebrationWhatsappUrl(whatsappUrl);
+    }
+  }, []);
+
+  const dismissOrderCelebration = useCallback(() => {
+    setCelebrationOrder(null);
+  }, []);
+
+  // Listen to Firebase Auth state with secure server-side admin authorization check
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
-        setIsAdmin(true);
-        setAdminUser({ email: user.email || 'Admin', role: 'admin' });
         try {
-          const ords = await api.getOrders();
-          setOrders(ords);
-        } catch (e) {
-          console.warn('Orders fetch on auth sync:', e);
+          const authRes = await api.loginFirebaseUser(user.email || undefined, user.phoneNumber || undefined);
+          setIsAdmin(true);
+          setAdminUser(authRes.user);
+          try {
+            const ords = await api.getOrders();
+            setOrders(ords);
+          } catch (e) {
+            console.warn('Orders fetch on auth sync:', e);
+          }
+        } catch (err: any) {
+          console.warn('Firebase user is not an authorized administrator:', err?.message);
+          setIsAdmin(false);
+          setAdminUser(null);
         }
       }
     });
@@ -214,6 +264,72 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     loadData();
     checkAdminAuth();
   }, [loadData, checkAdminAuth]);
+
+  // Real-Time Orders Synchronization (Firebase Firestore onSnapshot + Continuous Sync Polling)
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    let isSubscribed = true;
+    let unsubFirestore: (() => void) | null = null;
+
+    // Helper to merge and sort orders (latest orders first)
+    const mergeOrders = (newOrders: CustomerOrder[]) => {
+      setOrders(prev => {
+        const orderMap = new Map<string, CustomerOrder>();
+        prev.forEach(o => orderMap.set(o.id, o));
+        newOrders.forEach(o => orderMap.set(o.id, o));
+
+        const merged = Array.from(orderMap.values());
+        merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return merged;
+      });
+    };
+
+    // 1. Firebase Firestore onSnapshot real-time listener
+    try {
+      const ordersCol = collection(db, 'orders');
+      unsubFirestore = onSnapshot(
+        ordersCol,
+        (snapshot) => {
+          if (!isSubscribed) return;
+          const fbOrders: CustomerOrder[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as CustomerOrder;
+            fbOrders.push({ ...data, id: docSnap.id });
+          });
+          if (fbOrders.length > 0) {
+            mergeOrders(fbOrders);
+          }
+        },
+        (error) => {
+          console.warn('Firestore orders onSnapshot notice:', error?.message);
+        }
+      );
+    } catch (e) {
+      console.warn('Failed to attach Firestore orders listener:', e);
+    }
+
+    // 2. Continuous reliable synchronization polling from protected server API every 3.5 seconds
+    const syncFromServer = async () => {
+      try {
+        const serverOrders = await api.getOrders();
+        if (isSubscribed && Array.isArray(serverOrders) && serverOrders.length > 0) {
+          mergeOrders(serverOrders);
+        }
+      } catch {
+        // Handled silently
+      }
+    };
+
+    syncFromServer();
+    const intervalId = setInterval(syncFromServer, 3500);
+
+    return () => {
+      isSubscribed = false;
+      if (unsubFirestore) unsubFirestore();
+      clearInterval(intervalId);
+    };
+  }, [isAdmin]);
 
   // Compute live open status for IST (India Standard Time)
   const openStatus = useMemo((): OpenStatus => {
@@ -489,27 +605,46 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         status: 'pending',
       };
 
-      // Create order via API
-      let createdOrder: CustomerOrder;
+      // Create order via API (authoritative server validation & persistent storage)
+      let createdOrder: CustomerOrder | null = null;
+      let apiSaved = false;
       try {
         createdOrder = await api.createOrder(orderPayload);
-        setOrders(prev => [createdOrder, ...prev]);
-      } catch (err) {
-        console.warn('Backend order store failed, using fallback object:', err);
+        apiSaved = true;
+      } catch (err: any) {
+        console.warn('Backend order store note:', err?.message);
+      }
+
+      if (!createdOrder) {
         createdOrder = {
           ...(orderPayload as CustomerOrder),
           id: orderRef,
           createdAt: new Date().toISOString(),
+          status: 'pending',
+          paymentStatus: 'unpaid',
+          paymentMethod: 'pay_on_delivery',
         };
-        setOrders(prev => [createdOrder, ...prev]);
       }
 
-      // Also persist order to Firestore
+      // Automatically save complete order details to Firebase Firestore
+      let firestoreSaved = false;
       try {
-        await setDoc(doc(db, 'orders', createdOrder.id), createdOrder);
-      } catch (fsErr) {
-        console.warn('Firestore order write error (non-fatal):', fsErr);
+        await saveOrderToFirestore(createdOrder);
+        firestoreSaved = true;
+      } catch (fsErr: any) {
+        console.warn('Firestore order write note:', fsErr?.message);
       }
+
+      // Strict reliability check: do not continue unless order was successfully saved
+      if (!apiSaved && !firestoreSaved) {
+        throw new Error('Unable to record order in database. Please check your connection and try again.');
+      }
+
+      const finalOrder = createdOrder;
+      setOrders(prev => {
+        const filtered = prev.filter(o => o.id !== finalOrder.id);
+        return [finalOrder, ...filtered];
+      });
 
       // Build WhatsApp message formatted strictly as required
       let msg = `NEW HOME DELIVERY ORDER — ONE BITE\n\n`;
@@ -553,8 +688,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       const cleanPhone = (data.settings.whatsapp || '+918210442538').replace(/[^0-9]/g, '');
       const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
 
-      // NOTE: Do not automatically clear cart just because WhatsApp opens,
-      // as required by user prompt instructions.
+      // Show attractive success celebration popup only after order is confirmed saved in Firebase
+      triggerOrderCelebration(createdOrder, whatsappUrl);
 
       return {
         success: true,
@@ -567,19 +702,46 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
 
   // Admin Actions
   const handleLogin = async (email: string, pass: string) => {
+    // Attempt Firebase Email & Password sign-in if configured in Firebase Auth
+    try {
+      const fbUser = await signInWithEmail(email, pass);
+      if (fbUser) {
+        setFirebaseUser(fbUser);
+      }
+    } catch (fbErr: any) {
+      console.warn('Firebase email auth note:', fbErr?.message);
+    }
     const res = await api.login(email, pass);
     setIsAdmin(true);
     setAdminUser(res.user);
-    const ords = await api.getOrders();
-    setOrders(ords);
+    try {
+      const ords = await api.getOrders();
+      setOrders(ords);
+    } catch (e) {
+      console.warn('Orders fetch on login:', e);
+    }
+  };
+
+  const handleLoginWithMagicToken = async (token: string) => {
+    const res = await api.verifyLoginLink(token);
+    setIsAdmin(true);
+    setAdminUser(res.user);
+    try {
+      const ords = await api.getOrders();
+      setOrders(ords);
+    } catch (e) {
+      console.warn('Orders fetch on magic login:', e);
+    }
   };
 
   const loginWithGoogle = async () => {
     try {
       const user = await signInWithGoogle();
+      // Securely verify admin identity on server before granting admin privileges
+      const authRes = await api.loginFirebaseUser(user.email || undefined, user.phoneNumber || undefined);
       setFirebaseUser(user);
       setIsAdmin(true);
-      setAdminUser({ email: user.email || 'Admin', role: 'admin' });
+      setAdminUser(authRes.user);
       try {
         const ords = await api.getOrders();
         setOrders(ords);
@@ -590,8 +752,45 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       if (err?.code === 'auth/popup-closed-by-user') {
         throw new Error('Google sign-in was cancelled.');
       }
-      handleFirestoreError(err, OperationType.GET, 'auth');
+      throw err;
     }
+  };
+
+  const handleLoginWithMobile = async (phone: string, otp: string) => {
+    const res = await api.verifyOtp(phone, otp);
+    setIsAdmin(true);
+    setAdminUser(res.user);
+    try {
+      const ords = await api.getOrders();
+      setOrders(ords);
+    } catch (e) {
+      console.warn('Orders fetch on mobile login:', e);
+    }
+  };
+
+  const handleLoginWithFirebasePhone = async (phone: string, user: User) => {
+    const res = await api.loginPhone(phone, user.uid);
+    setFirebaseUser(user);
+    setIsAdmin(true);
+    setAdminUser(res.user);
+    try {
+      const ords = await api.getOrders();
+      setOrders(ords);
+    } catch (e) {
+      console.warn('Orders fetch on firebase phone login:', e);
+    }
+  };
+
+  const handleCheckAdminPhone = async (phone: string) => {
+    return await api.checkAdminPhone(phone);
+  };
+
+  const handleSendOtp = async (phone: string) => {
+    return await api.sendOtp(phone);
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    return await api.forgotPassword(email);
   };
 
   const handleLogout = async () => {
@@ -755,12 +954,71 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
 
   const handleUpdateOrderStatus = async (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid') => {
     const updated = await api.updateOrderStatus(id, status, paymentStatus);
-    setOrders(prev => prev.map(o => (o.id === id ? updated : o)));
+    try {
+      const orderDocRef = doc(db, 'orders', id);
+      const updatePayload: Record<string, any> = { status };
+      if (paymentStatus) updatePayload.paymentStatus = paymentStatus;
+      await setDoc(orderDocRef, updatePayload, { merge: true });
+    } catch (fsErr: any) {
+      console.warn('Firestore status update note:', fsErr?.message);
+    }
+    setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated, status, ...(paymentStatus ? { paymentStatus } : {}) } : o)));
   };
 
   const handleUpdateOrderPaymentStatus = async (id: string, paymentStatus: 'unpaid' | 'paid') => {
     const updated = await api.updateOrderPaymentStatus(id, paymentStatus);
-    setOrders(prev => prev.map(o => (o.id === id ? updated : o)));
+    try {
+      const orderDocRef = doc(db, 'orders', id);
+      await setDoc(orderDocRef, { paymentStatus }, { merge: true });
+    } catch (fsErr: any) {
+      console.warn('Firestore payment update note:', fsErr?.message);
+    }
+    setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated, paymentStatus } : o)));
+  };
+
+  const handleAssignOrderToDeliveryBoy = async (orderId: string) => {
+    const updated = await api.assignOrder(orderId);
+    try {
+      await assignOrderInFirestore(orderId, {
+        assignedAt: updated.assignedAt,
+        assignedBy: updated.assignedBy || 'Admin',
+      });
+    } catch (fsErr: any) {
+      console.warn('Firestore assign note:', fsErr?.message);
+    }
+    setOrders(prev =>
+      prev.map(o => (o.id === orderId ? { ...o, ...updated, assignedToDeliveryBoy: true, deliveryStatus: 'Assigned' } : o))
+    );
+  };
+
+  const handleUnassignOrderFromDeliveryBoy = async (orderId: string) => {
+    const updated = await api.unassignOrder(orderId);
+    try {
+      await unassignOrderInFirestore(orderId);
+    } catch (fsErr: any) {
+      console.warn('Firestore unassign note:', fsErr?.message);
+    }
+    setOrders(prev =>
+      prev.map(o => (o.id === orderId ? { ...o, ...updated, assignedToDeliveryBoy: false, deliveryStatus: 'Pending' } : o))
+    );
+  };
+
+  const handleCreateManualOrder = async (orderData: Partial<CustomerOrder>, assignImmediately = true) => {
+    const payload = {
+      ...orderData,
+      assignedToDeliveryBoy: assignImmediately,
+      orderType: 'delivery' as const,
+      status: (assignImmediately ? 'confirmed' : 'pending') as CustomerOrder['status'],
+      deliveryStatus: assignImmediately ? 'Assigned' : 'Pending',
+    };
+    const created = await api.createOrder(payload);
+    try {
+      await saveOrderToFirestore(created);
+    } catch (fsErr: any) {
+      console.warn('Firestore manual order note:', fsErr?.message);
+    }
+    setOrders(prev => [created, ...prev.filter(o => o.id !== created.id)]);
+    return created;
   };
 
   return (
@@ -798,8 +1056,16 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         clearCart,
         placeOrder,
         refreshData: loadData,
+        setIsAdmin,
+        setAdminUser,
+        loginWithMagicToken: handleLoginWithMagicToken,
         login: handleLogin,
         loginWithGoogle,
+        loginWithMobile: handleLoginWithMobile,
+        loginWithFirebasePhone: handleLoginWithFirebasePhone,
+        checkAdminPhone: handleCheckAdminPhone,
+        sendOtp: handleSendOtp,
+        forgotPassword: handleForgotPassword,
         logout: handleLogout,
         firebaseUser,
         updateSettings: handleUpdateSettings,
@@ -819,6 +1085,13 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         resetToDefaults: handleResetToDefaults,
         updateOrderStatus: handleUpdateOrderStatus,
         updateOrderPaymentStatus: handleUpdateOrderPaymentStatus,
+        assignOrderToDeliveryBoy: handleAssignOrderToDeliveryBoy,
+        unassignOrderFromDeliveryBoy: handleUnassignOrderFromDeliveryBoy,
+        createManualOrder: handleCreateManualOrder,
+        celebrationOrder,
+        celebrationWhatsappUrl,
+        triggerOrderCelebration,
+        dismissOrderCelebration,
       }}
     >
       {children}

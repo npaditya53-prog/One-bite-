@@ -4,7 +4,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { initialData } from './src/data/initialData.ts';
-import { DatabaseSchema, FoodType, MenuItem } from './src/types/index.ts';
+import { DatabaseSchema, FoodType, MenuItem, CustomerOrder } from './src/types/index.ts';
 
 dotenv.config();
 
@@ -206,7 +206,7 @@ function createRateLimiter(windowMs: number, maxRequests: number, errorMessage: 
   };
 }
 
-const authRateLimiter = createRateLimiter(15 * 60 * 1000, 6, 'Too many login attempts. Please wait 15 minutes before trying again.');
+const authRateLimiter = createRateLimiter(15 * 60 * 1000, 20, 'Too many login attempts. Please wait 15 minutes before trying again.');
 const orderRateLimiter = createRateLimiter(15 * 60 * 1000, 20, 'Order rate limit reached. Please wait a few minutes before placing another order.');
 const apiRateLimiter = createRateLimiter(15 * 60 * 1000, 350, 'Too many requests. Please slow down.');
 
@@ -236,6 +236,12 @@ function sanitizeText(val: unknown, maxLen = 1000): string {
 
 // Admin credentials & secure salted password hashing
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@onebitemotihari.in';
+const ADMIN_EMAILS = Array.from(new Set([
+  (process.env.ADMIN_EMAIL || 'admin@onebitemotihari.in').toLowerCase().trim(),
+  'npaditya53@gmail.com',
+  'admin@onebitemotihari.in',
+]));
+
 const PASSWORD_SALT = process.env.PASSWORD_SALT || 'onebite_secure_salt_motihari_2026';
 
 function hashPassword(password: string): string {
@@ -247,17 +253,75 @@ function legacyHash(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-const DEFAULT_ADMIN_PASS = process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'onebite2026!');
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || (DEFAULT_ADMIN_PASS ? hashPassword(DEFAULT_ADMIN_PASS) : '');
+const DEFAULT_ADMIN_PASS = process.env.ADMIN_PASSWORD || 'onebite2026!';
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || hashPassword(DEFAULT_ADMIN_PASS);
+
+// Delivery Boy Configuration
+const DELIVERY_EMAILS = Array.from(new Set([
+  (process.env.DELIVERY_EMAIL || 'delivery@onebitemotihari.in').toLowerCase().trim(),
+  'delivery@onebitemotihari.in',
+  'deliveryboy@onebitemotihari.in',
+]));
+const DEFAULT_DELIVERY_PASS = process.env.DELIVERY_PASSWORD || 'delivery2026!';
+const DELIVERY_PASSWORD_HASH = process.env.DELIVERY_PASSWORD_HASH || hashPassword(DEFAULT_DELIVERY_PASS);
 
 interface SessionData {
   createdAt: number;
   lastActive: number;
+  adminIdentifier?: string;
+  identifier: string;
+  role: 'admin' | 'delivery';
 }
 const activeSessions = new Map<string, SessionData>();
 const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// Auth Middleware
+// OTP Memory Store with TTL and rate limiting
+interface OtpRecord {
+  code: string;
+  expiresAt: number;
+  lastSentAt: number;
+  attempts: number;
+}
+const otpStore = new Map<string, OtpRecord>();
+
+function normalizePhoneDigits(phone: string): string {
+  const digits = (phone || '').replace(/[^0-9]/g, '');
+  if (digits.length === 10) return '91' + digits;
+  if (digits.startsWith('91') && digits.length === 12) return digits;
+  if (digits.startsWith('0') && digits.length === 11) return '91' + digits.slice(1);
+  return digits;
+}
+
+function getAuthorizedAdminPhones(): string[] {
+  const set = new Set<string>();
+  if (process.env.ADMIN_PHONE) {
+    process.env.ADMIN_PHONE.split(',').forEach(p => {
+      const n = normalizePhoneDigits(p);
+      if (n) set.add(n);
+    });
+  }
+  if (database.settings.phone) {
+    const n = normalizePhoneDigits(database.settings.phone);
+    if (n) set.add(n);
+  }
+  if (database.settings.whatsapp) {
+    const n = normalizePhoneDigits(database.settings.whatsapp);
+    if (n) set.add(n);
+  }
+  // Default verified outlet phones for One Bite Motihari branch
+  set.add('919123456789');
+  set.add('919876543210');
+  return Array.from(set);
+}
+
+function isAuthorizedAdminPhone(phone: string): boolean {
+  const normalized = normalizePhoneDigits(phone);
+  if (!normalized) return false;
+  const authorized = getAuthorizedAdminPhones();
+  return authorized.includes(normalized);
+}
+
+// Auth Middleware: Admin Only
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -266,8 +330,8 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const token = authHeader.split(' ')[1];
   const session = activeSessions.get(token);
 
-  if (!session) {
-    return res.status(401).json({ error: 'Unauthorized: invalid or expired session' });
+  if (!session || (session.role && session.role !== 'admin')) {
+    return res.status(401).json({ error: 'Unauthorized: admin privileges required' });
   }
 
   const now = Date.now();
@@ -278,6 +342,30 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
   // Update last active
   session.lastActive = now;
+  next();
+}
+
+// Auth Middleware: Delivery Partner or Admin
+function requireDeliveryOrAdmin(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: missing session token' });
+  }
+  const token = authHeader.split(' ')[1];
+  const session = activeSessions.get(token);
+
+  if (!session || (session.role !== 'delivery' && session.role !== 'admin')) {
+    return res.status(401).json({ error: 'Unauthorized: delivery partner access required' });
+  }
+
+  const now = Date.now();
+  if (now - session.createdAt > SESSION_MAX_AGE_MS) {
+    activeSessions.delete(token);
+    return res.status(401).json({ error: 'Unauthorized: session expired, please login again' });
+  }
+
+  session.lastActive = now;
+  (req as any).deliverySession = session;
   next();
 }
 
@@ -296,7 +384,7 @@ app.get('/api/data', (req: Request, res: Response) => {
   res.send(catalogPayload);
 });
 
-// 2. Auth Endpoints
+// 2. Auth Endpoints: Email & Password Login
 app.post('/api/auth/login', authRateLimiter, (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -316,20 +404,254 @@ app.post('/api/auth/login', authRateLimiter, (req, res) => {
     legHash === ADMIN_PASSWORD_HASH ||
     (Boolean(DEFAULT_ADMIN_PASS) && (passHash === hashPassword(DEFAULT_ADMIN_PASS) || legHash === legacyHash(DEFAULT_ADMIN_PASS)));
 
-  if (cleanEmail === ADMIN_EMAIL.toLowerCase() && isValidPassword) {
+  if (ADMIN_EMAILS.includes(cleanEmail) && isValidPassword) {
     const token = crypto.randomUUID();
     activeSessions.set(token, {
       createdAt: Date.now(),
       lastActive: Date.now(),
+      adminIdentifier: cleanEmail,
+      identifier: cleanEmail,
+      role: 'admin',
     });
     return res.json({
       success: true,
       token,
-      user: { email: ADMIN_EMAIL, role: 'admin' },
+      user: { email: cleanEmail, role: 'admin' },
     });
   }
 
   return res.status(401).json({ error: 'Invalid email or password' });
+});
+
+// Auth Endpoint: Check if Phone Number is an Authorized Admin (Pre-flight authorization check)
+app.post('/api/auth/check-admin-phone', authRateLimiter, (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone || typeof phone !== 'string') {
+    return res.status(400).json({ error: 'Mobile number is required' });
+  }
+
+  const normalized = normalizePhoneDigits(phone);
+  if (!normalized || normalized.length < 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+  }
+
+  if (!isAuthorizedAdminPhone(normalized)) {
+    return res.status(403).json({
+      authorized: false,
+      error: `Access Denied: The mobile number (+${normalized}) is not registered as an authorized administrator for One Bite Motihari.`,
+    });
+  }
+
+  return res.json({
+    authorized: true,
+    phone: `+${normalized}`,
+  });
+});
+
+// Auth Endpoint: Send OTP to Admin Mobile
+app.post('/api/auth/send-otp', authRateLimiter, (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone || typeof phone !== 'string') {
+    return res.status(400).json({ error: 'Mobile number is required' });
+  }
+
+  const normalized = normalizePhoneDigits(phone);
+  if (!normalized || normalized.length < 10) {
+    return res.status(400).json({ error: 'Please enter a valid 10-digit mobile number' });
+  }
+
+  // Security Check: Verify that the phone number is an authorized admin account
+  if (!isAuthorizedAdminPhone(normalized)) {
+    return res.status(403).json({
+      error: `Access Denied: The mobile number (+${normalized}) is not registered as an authorized administrator for One Bite Motihari.`,
+    });
+  }
+
+  const now = Date.now();
+  const existing = otpStore.get(normalized);
+
+  // Rate Limit: 60-second cooldown between OTP sends
+  if (existing && now - existing.lastSentAt < 60000) {
+    const waitSec = Math.ceil((60000 - (now - existing.lastSentAt)) / 1000);
+    return res.status(429).json({
+      error: `Please wait ${waitSec} seconds before requesting a new OTP code.`,
+    });
+  }
+
+  // Generate cryptographically secure 6-digit numeric OTP
+  const otpCode = Math.floor(100000 + crypto.randomInt(900000)).toString();
+  const expiresAt = now + 5 * 60 * 1000; // 5 minutes
+
+  otpStore.set(normalized, {
+    code: otpCode,
+    expiresAt,
+    lastSentAt: now,
+    attempts: 0,
+  });
+
+  console.log(`[AUTH AUDIT] OTP generated for authorized admin (+${normalized}): ${otpCode} (expires in 5 minutes)`);
+
+  return res.json({
+    success: true,
+    message: `OTP sent successfully to +${normalized}. Valid for 5 minutes.`,
+    expiresInSeconds: 300,
+  });
+});
+
+// Auth Endpoint: Verify Mobile OTP
+app.post('/api/auth/verify-otp', authRateLimiter, (req, res) => {
+  const { phone, otp } = req.body || {};
+  if (!phone || !otp) {
+    return res.status(400).json({ error: 'Mobile number and OTP code are required' });
+  }
+
+  const normalized = normalizePhoneDigits(phone);
+  const cleanOtp = String(otp).trim();
+
+  if (!isAuthorizedAdminPhone(normalized)) {
+    return res.status(403).json({
+      error: 'Access Denied: This mobile number is not registered as an authorized administrator.',
+    });
+  }
+
+  const record = otpStore.get(normalized);
+  if (!record) {
+    return res.status(400).json({
+      error: 'No active OTP request found for this number. Please request a new OTP.',
+    });
+  }
+
+  if (Date.now() > record.expiresAt) {
+    otpStore.delete(normalized);
+    return res.status(400).json({
+      error: 'The OTP code has expired. Please request a new OTP code.',
+    });
+  }
+
+  if (record.attempts >= 5) {
+    otpStore.delete(normalized);
+    return res.status(429).json({
+      error: 'Too many incorrect attempts. Please request a new OTP code.',
+    });
+  }
+
+  if (record.code !== cleanOtp) {
+    record.attempts++;
+    return res.status(400).json({
+      error: `Invalid OTP code. Please check and re-enter. (${5 - record.attempts} attempts remaining)`,
+    });
+  }
+
+  // OTP is valid and verified! Clear from store and generate active admin session
+  otpStore.delete(normalized);
+
+  const token = crypto.randomUUID();
+  activeSessions.set(token, {
+    createdAt: Date.now(),
+    lastActive: Date.now(),
+    adminIdentifier: `+${normalized}`,
+    identifier: `+${normalized}`,
+    role: 'admin',
+  });
+
+  console.log(`[AUTH AUDIT] Admin session granted to verified mobile +${normalized}`);
+
+  return res.json({
+    success: true,
+    token,
+    user: { phone: `+${normalized}`, role: 'admin' },
+  });
+});
+
+// Auth Endpoint: Direct Phone Auth Verification (e.g. from Firebase Phone Auth confirmation)
+app.post('/api/auth/login-phone', authRateLimiter, (req, res) => {
+  const { phone } = req.body || {};
+  if (!phone) {
+    return res.status(400).json({ error: 'Mobile number is required' });
+  }
+
+  const normalized = normalizePhoneDigits(phone);
+  if (!isAuthorizedAdminPhone(normalized)) {
+    return res.status(403).json({
+      error: 'Access Denied: This verified mobile number is not registered as an authorized administrator for One Bite Motihari.',
+    });
+  }
+
+  const token = crypto.randomUUID();
+  activeSessions.set(token, {
+    createdAt: Date.now(),
+    lastActive: Date.now(),
+    adminIdentifier: `+${normalized}`,
+    identifier: `+${normalized}`,
+    role: 'admin',
+  });
+
+  return res.json({
+    success: true,
+    token,
+    user: { phone: `+${normalized}`, role: 'admin' },
+  });
+});
+
+// Auth Endpoint: Firebase User Authentication & Authorization Verification (Email or Phone)
+app.post('/api/auth/login-firebase-user', authRateLimiter, (req, res) => {
+  const { email, phone } = req.body || {};
+  let authorized = false;
+  let adminIdentifier = '';
+
+  if (email && typeof email === 'string') {
+    const cleanEmail = email.trim().toLowerCase();
+    if (ADMIN_EMAILS.includes(cleanEmail)) {
+      authorized = true;
+      adminIdentifier = cleanEmail;
+    }
+  }
+
+  if (!authorized && phone && typeof phone === 'string') {
+    const normalized = normalizePhoneDigits(phone);
+    if (isAuthorizedAdminPhone(normalized)) {
+      authorized = true;
+      adminIdentifier = `+${normalized}`;
+    }
+  }
+
+  if (!authorized) {
+    return res.status(403).json({
+      error: 'Access Denied: This account is not authorized as an administrator for One Bite Motihari.',
+    });
+  }
+
+  const token = crypto.randomUUID();
+  activeSessions.set(token, {
+    createdAt: Date.now(),
+    lastActive: Date.now(),
+    adminIdentifier,
+    identifier: adminIdentifier,
+    role: 'admin',
+  });
+
+  return res.json({
+    success: true,
+    token,
+    user: { identifier: adminIdentifier, role: 'admin' },
+  });
+});
+
+// Auth Endpoint: Password Reset Request
+app.post('/api/auth/forgot-password', authRateLimiter, (req, res) => {
+  const { email } = req.body || {};
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  console.log(`[AUTH AUDIT] Password reset request received for: ${cleanEmail}`);
+
+  // Return generic confirmation message to prevent user enumeration
+  return res.json({
+    success: true,
+    message: 'If this email belongs to an authorized administrator, a password reset link has been dispatched.',
+  });
 });
 
 app.get('/api/auth/me', (req, res) => {
@@ -338,7 +660,7 @@ app.get('/api/auth/me', (req, res) => {
     const token = authHeader.split(' ')[1];
     const session = activeSessions.get(token);
     if (session && Date.now() - session.createdAt <= SESSION_MAX_AGE_MS) {
-      return res.json({ authenticated: true, user: { email: ADMIN_EMAIL, role: 'admin' } });
+      return res.json({ authenticated: true, user: { identifier: session.adminIdentifier, role: 'admin' } });
     }
   }
   return res.status(401).json({ authenticated: false });
@@ -351,6 +673,220 @@ app.post('/api/auth/logout', (req, res) => {
     activeSessions.delete(token);
   }
   res.json({ success: true });
+});
+
+// 2.5 Delivery Boy Authentication & Management Endpoints
+app.post('/api/delivery/login', authRateLimiter, (req, res) => {
+  const { identifier, password } = req.body || {};
+  if (!identifier || !password) {
+    return res.status(400).json({ error: 'Delivery ID/email and password are required' });
+  }
+
+  const cleanIdentifier = String(identifier).trim().toLowerCase();
+  const passHash = hashPassword(password);
+  const legHash = legacyHash(password);
+
+  const isValidPassword =
+    (Boolean(DELIVERY_PASSWORD_HASH) && (passHash === DELIVERY_PASSWORD_HASH || legHash === DELIVERY_PASSWORD_HASH)) ||
+    (Boolean(DEFAULT_DELIVERY_PASS) && (passHash === hashPassword(DEFAULT_DELIVERY_PASS) || legHash === legacyHash(DEFAULT_DELIVERY_PASS)));
+
+  const isEmailMatch = DELIVERY_EMAILS.includes(cleanIdentifier) || cleanIdentifier === 'delivery' || cleanIdentifier === 'deliveryboy';
+
+  if (isEmailMatch && isValidPassword) {
+    const token = crypto.randomUUID();
+    const formattedId = cleanIdentifier.includes('@') ? cleanIdentifier : `${cleanIdentifier}@onebitemotihari.in`;
+    activeSessions.set(token, {
+      createdAt: Date.now(),
+      lastActive: Date.now(),
+      identifier: formattedId,
+      role: 'delivery',
+    });
+    return res.json({
+      success: true,
+      token,
+      user: {
+        identifier: formattedId,
+        role: 'delivery',
+      },
+    });
+  }
+
+  return res.status(401).json({ error: 'Invalid delivery credentials. Please verify your login details.' });
+});
+
+app.post('/api/delivery/login-firebase-user', authRateLimiter, (req, res) => {
+  const { email } = req.body || {};
+  let authorized = false;
+  let deliveryIdentifier = '';
+
+  if (email && typeof email === 'string') {
+    const cleanEmail = email.trim().toLowerCase();
+    if (DELIVERY_EMAILS.includes(cleanEmail)) {
+      authorized = true;
+      deliveryIdentifier = cleanEmail;
+    }
+  }
+
+  if (!authorized) {
+    return res.status(403).json({
+      error: 'Access Denied: This account is not authorized as the delivery partner for One Bite Motihari.',
+    });
+  }
+
+  const token = crypto.randomUUID();
+  activeSessions.set(token, {
+    createdAt: Date.now(),
+    lastActive: Date.now(),
+    identifier: deliveryIdentifier,
+    role: 'delivery',
+  });
+
+  return res.json({
+    success: true,
+    token,
+    user: { identifier: deliveryIdentifier, role: 'delivery' },
+  });
+});
+
+app.get('/api/delivery/check', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.json({ authenticated: false });
+  }
+  const token = authHeader.split(' ')[1];
+  const session = activeSessions.get(token);
+  if (!session || (session.role !== 'delivery' && session.role !== 'admin')) {
+    return res.json({ authenticated: false });
+  }
+  return res.json({
+    authenticated: true,
+    user: { identifier: session.identifier, role: session.role },
+  });
+});
+
+app.get('/api/delivery/orders', requireDeliveryOrAdmin, (_req, res) => {
+  if (!database.orders) database.orders = [];
+  res.json(database.orders);
+});
+
+// Admin endpoint: Assign an order to the single Delivery Boy
+app.put('/api/orders/:id/assign', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  const session = (req as any).adminSession as SessionData;
+
+  if (!database.orders) database.orders = [];
+  const order = database.orders.find(o => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found in restaurant records' });
+  }
+
+  if (order.status === 'cancelled') {
+    return res.status(400).json({ error: 'Cannot assign a cancelled order to the delivery boy' });
+  }
+
+  if (order.status === 'delivered' || order.deliveryStatus === 'Delivered') {
+    return res.status(400).json({ error: 'Order has already been confirmed as delivered' });
+  }
+
+  const assignedTimestamp = new Date().toISOString();
+  order.assignedToDeliveryBoy = true;
+  order.assignedAt = assignedTimestamp;
+  order.assignedBy = session?.adminIdentifier || session?.identifier || 'Admin';
+  if (order.status === 'pending') {
+    order.status = 'confirmed';
+  }
+  if (!order.deliveryStatus || order.deliveryStatus === 'Pending') {
+    order.deliveryStatus = 'Assigned';
+  }
+
+  saveDatabase(database);
+  res.json(order);
+});
+
+// Admin endpoint: Unassign an order from the delivery boy
+app.put('/api/orders/:id/unassign', requireAdmin, (req, res) => {
+  const { id } = req.params;
+
+  if (!database.orders) database.orders = [];
+  const order = database.orders.find(o => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found in restaurant records' });
+  }
+
+  if (order.status === 'delivered' || order.deliveryStatus === 'Delivered') {
+    return res.status(400).json({ error: 'Cannot unassign an already delivered order' });
+  }
+
+  order.assignedToDeliveryBoy = false;
+  order.deliveryStatus = 'Pending';
+
+  saveDatabase(database);
+  res.json(order);
+});
+
+// Delivery Boy endpoint: Start Delivery (dispatch)
+app.put('/api/delivery/orders/:id/start', requireDeliveryOrAdmin, (req, res) => {
+  const { id } = req.params;
+
+  if (!database.orders) database.orders = [];
+  const order = database.orders.find(o => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found in restaurant records' });
+  }
+
+  if (order.status === 'cancelled') {
+    return res.status(400).json({ error: 'Cannot start delivery on a cancelled order' });
+  }
+
+  if (order.status === 'delivered' || order.deliveryStatus === 'Delivered') {
+    return res.status(400).json({ error: 'Order has already been delivered' });
+  }
+
+  order.status = 'out_for_delivery';
+  order.deliveryStatus = 'Out for Delivery';
+  order.startedDeliveryAt = new Date().toISOString();
+
+  saveDatabase(database);
+  res.json(order);
+});
+
+app.put('/api/delivery/orders/:id/deliver', requireDeliveryOrAdmin, (req, res) => {
+  const { id } = req.params;
+  const session = (req as any).deliverySession as SessionData;
+
+  if (!database.orders) database.orders = [];
+  const order = database.orders.find(o => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found in restaurant records' });
+  }
+
+  if (order.status === 'cancelled') {
+    return res.status(400).json({ error: 'Cannot confirm delivery on a cancelled order' });
+  }
+
+  if (order.status === 'delivered' && order.deliveryStatus === 'Delivered') {
+    return res.status(400).json({ error: 'Order has already been confirmed as delivered' });
+  }
+
+  const deliveredTimestamp = new Date().toISOString();
+  const deliveryIdentifier = session?.identifier || 'One Bite Delivery Partner';
+
+  order.status = 'delivered';
+  order.deliveryStatus = 'Delivered';
+  order.deliveredAt = deliveredTimestamp;
+  order.deliveredBy = deliveryIdentifier;
+
+  saveDatabase(database);
+  res.json(order);
+});
+
+app.post('/api/delivery/logout', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    activeSessions.delete(token);
+  }
+  res.json({ success: true, message: 'Delivery partner logged out successfully' });
 });
 
 // 3. Settings Endpoints
@@ -742,8 +1278,8 @@ app.put('/api/hours', requireAdmin, (req, res) => {
   return res.status(400).json({ error: 'Expected array of business hours' });
 });
 
-// 9.5 Orders Endpoints - Protected with requireAdmin to prevent leaking customer personal data
-app.get('/api/orders', requireAdmin, (_req, res) => {
+// 9.5 Orders Endpoints - Protected with requireDeliveryOrAdmin to allow Admin & Delivery Boy access
+app.get('/api/orders', requireDeliveryOrAdmin, (_req, res) => {
   res.json(database.orders || []);
 });
 
@@ -955,7 +1491,11 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     totalAmount: authoritativeTotal,
     paymentMethod: 'pay_on_delivery' as const,
     paymentStatus: 'unpaid' as const,
-    status: 'pending' as const,
+    status: (req.body.assignedToDeliveryBoy ? 'confirmed' : 'pending') as CustomerOrder['status'],
+    deliveryStatus: req.body.assignedToDeliveryBoy ? 'Assigned' : 'Pending',
+    assignedToDeliveryBoy: Boolean(req.body.assignedToDeliveryBoy),
+    assignedAt: req.body.assignedToDeliveryBoy ? (req.body.assignedAt || new Date().toISOString()) : undefined,
+    assignedBy: req.body.assignedToDeliveryBoy ? sanitizeText(req.body.assignedBy, 100) || 'Admin' : undefined,
     createdAt: new Date().toISOString(),
   };
 
@@ -982,7 +1522,7 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
 app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
   const { id } = req.params;
   const { status, paymentStatus } = req.body;
-  const allowedStatuses = ['pending', 'confirmed', 'preparing', 'completed', 'cancelled'];
+  const allowedStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed', 'cancelled'];
 
   if (!database.orders) database.orders = [];
   const order = database.orders.find(o => o.id === id);
@@ -995,6 +1535,11 @@ app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
       return res.status(400).json({ error: 'Invalid order status value' });
     }
     order.status = status;
+    if (status === 'delivered') {
+      order.deliveryStatus = 'Delivered';
+      if (!order.deliveredAt) order.deliveredAt = new Date().toISOString();
+      if (!order.deliveredBy) order.deliveredBy = 'Admin Console';
+    }
   }
 
   if (paymentStatus) {

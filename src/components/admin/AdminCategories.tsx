@@ -226,7 +226,7 @@ export function AdminCategories() {
                   required
                   value={editingCat.name || ''}
                   onChange={e => setEditingCat({ ...editingCat, name: e.target.value })}
-                  placeholder="e.g. Burgers, Pizzas, Shakes"
+                  placeholder="Category name"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
               </div>

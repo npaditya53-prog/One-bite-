@@ -213,7 +213,7 @@ export function AdminReviews() {
                   required
                   value={editingReview.customerName || ''}
                   onChange={e => setEditingReview({ ...editingReview, customerName: e.target.value })}
-                  placeholder="e.g. Ramesh Kumar"
+                  placeholder="Customer name"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
               </div>
@@ -254,7 +254,7 @@ export function AdminReviews() {
                   required
                   value={editingReview.reviewText || ''}
                   onChange={e => setEditingReview({ ...editingReview, reviewText: e.target.value })}
-                  placeholder="Genuine feedback about food quality, taste, or service..."
+                  placeholder="Customer feedback about food quality, taste, or service..."
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                 />
               </div>
@@ -268,7 +268,7 @@ export function AdminReviews() {
                     type="text"
                     value={editingReview.reviewDate || ''}
                     onChange={e => setEditingReview({ ...editingReview, reviewDate: e.target.value })}
-                    placeholder="e.g. October 2026"
+                    placeholder="Review date or month"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                   />
                 </div>
@@ -281,7 +281,7 @@ export function AdminReviews() {
                     type="text"
                     value={editingReview.source || ''}
                     onChange={e => setEditingReview({ ...editingReview, source: e.target.value })}
-                    placeholder="e.g. Google Review"
+                    placeholder="Platform or source"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                   />
                 </div>

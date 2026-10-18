@@ -239,7 +239,7 @@ export function AdminGallery() {
                     type="url"
                     value={editingPhoto.imageUrl || ''}
                     onChange={e => setEditingPhoto({ ...editingPhoto, imageUrl: e.target.value })}
-                    placeholder="https://images.unsplash.com/..."
+                    placeholder="Image URL"
                     className="flex-1 px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                   />
                   <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold rounded-xl cursor-pointer">
@@ -296,7 +296,7 @@ export function AdminGallery() {
                   type="text"
                   value={editingPhoto.caption || ''}
                   onChange={e => setEditingPhoto({ ...editingPhoto, caption: e.target.value })}
-                  placeholder="e.g. Freshly baked Farm Fresh Pizza at One Bite Motihari"
+                  placeholder="Caption or description"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                 />
               </div>

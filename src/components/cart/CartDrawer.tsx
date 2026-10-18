@@ -446,7 +446,7 @@ export function CartDrawer() {
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Enter coupon code (e.g. ONEBITE20)"
+                        placeholder="Enter coupon code"
                         value={couponCodeInput}
                         onChange={e => setCouponCodeInput(e.target.value.toUpperCase())}
                         className="flex-1 px-3 py-1.5 text-xs font-mono uppercase bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -540,18 +540,27 @@ export function CartDrawer() {
                   </div>
                 </div>
 
-                {/* Proceed to Delivery Button */}
-                <div className="pt-2">
+                {/* Action Buttons: PROCEED TO CHECKOUT & CONTINUE SHOPPING */}
+                <div className="pt-2 space-y-2">
                   <button
                     type="button"
                     onClick={() => setStep('checkout')}
                     className="w-full py-3.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-extrabold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Proceed to Delivery & Checkout</span>
+                    <span>PROCEED TO CHECKOUT</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
-                  <p className="text-[11px] text-center text-stone-500 mt-2">
-                    Pay on Delivery (Cash or QR Code) · No online advance payment required
+
+                  <button
+                    type="button"
+                    onClick={() => setIsCartOpen(false)}
+                    className="w-full py-2.5 px-4 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    CONTINUE SHOPPING
+                  </button>
+
+                  <p className="text-[11px] text-center text-stone-500 pt-1">
+                    Pay on Delivery (Cash or QR Code) · No advance or online payment required
                   </p>
                 </div>
               </div>
@@ -562,15 +571,25 @@ export function CartDrawer() {
         {/* STEP 2: CHECKOUT & DELIVERY DETAILS */}
         {step === 'checkout' && (
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
-            {/* Back button */}
-            <button
-              type="button"
-              onClick={() => setStep('cart')}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-stone-600 hover:text-stone-950 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Edit Cart ({cart.length} items · ₹{finalPayableTotal})</span>
-            </button>
+            {/* Navigation & Edit Cart Controls */}
+            <div className="flex items-center justify-between gap-2 pb-2 border-b border-stone-100">
+              <button
+                type="button"
+                onClick={() => setStep('cart')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>EDIT CART ({cart.length} items)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsCartOpen(false)}
+                className="text-xs font-bold text-stone-600 hover:text-stone-900 transition-colors cursor-pointer"
+              >
+                CONTINUE SHOPPING
+              </button>
+            </div>
 
             <form onSubmit={handlePlaceOrder} className="space-y-4">
               {/* Customer Information */}
@@ -589,7 +608,7 @@ export function CartDrawer() {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. Ramesh Kumar"
+                      placeholder="Full name"
                       value={customerName}
                       onChange={e => {
                         setCustomerName(e.target.value);
@@ -620,7 +639,7 @@ export function CartDrawer() {
                     <input
                       type="tel"
                       required
-                      placeholder="10-digit mobile number (e.g. 9876543210)"
+                      placeholder="10-digit mobile number"
                       value={customerPhone}
                       onChange={e => {
                         setCustomerPhone(e.target.value);
@@ -660,7 +679,7 @@ export function CartDrawer() {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Flat 302, House 14"
+                        placeholder="House number, flat, or shop"
                         value={houseFlat}
                         onChange={e => {
                           setHouseFlat(e.target.value);
@@ -691,7 +710,7 @@ export function CartDrawer() {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Arya Samaj Chowk, Bagaha Dhala"
+                        placeholder="Street, road, or area locality"
                         value={streetArea}
                         onChange={e => {
                           setStreetArea(e.target.value);
@@ -721,7 +740,7 @@ export function CartDrawer() {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Near Jockey Showroom"
+                      placeholder="Nearby landmark"
                       value={landmark}
                       onChange={e => setLandmark(e.target.value)}
                       className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -759,7 +778,7 @@ export function CartDrawer() {
                       type="text"
                       required
                       maxLength={6}
-                      placeholder="845401"
+                      placeholder="6-digit PIN code"
                       value={pincode}
                       onChange={e => {
                         setPincode(e.target.value);
@@ -787,7 +806,7 @@ export function CartDrawer() {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Call upon arrival, extra spicy, contactless doorstep drop"
+                    placeholder="Special delivery notes or directions"
                     value={deliveryInstructions}
                     onChange={e => setDeliveryInstructions(e.target.value)}
                     className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -810,7 +829,7 @@ export function CartDrawer() {
                 </div>
 
                 <p className="text-xs text-amber-950 font-medium leading-relaxed">
-                  Pay only when your food is delivered to your home. You can pay the delivery person in cash or scan their QR code when they arrive. No online payment or advance payment is required while placing your order.
+                  Pay when your food arrives at your home. You can pay in cash or scan the delivery boy's QR code at the time of delivery. No advance or online payment is required.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">

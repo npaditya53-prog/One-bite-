@@ -450,7 +450,7 @@ export function AdminMenu() {
                     required
                     value={editingItem.name || ''}
                     onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
-                    placeholder="e.g. OB Chicken Amazing"
+                    placeholder="Dish name"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                   />
                 </div>
@@ -492,7 +492,7 @@ export function AdminMenu() {
                         price: val.toUpperCase() === 'MRP' ? 'MRP' : Number(val) || 0,
                       });
                     }}
-                    placeholder="e.g. 120 or MRP"
+                    placeholder="Base price or MRP"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                   />
                 </div>
@@ -511,7 +511,7 @@ export function AdminMenu() {
                         discountPrice: e.target.value ? Number(e.target.value) : null,
                       })
                     }
-                    placeholder="e.g. 99"
+                    placeholder="Discounted price"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                   />
                 </div>
@@ -536,7 +536,7 @@ export function AdminMenu() {
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="block text-xs font-bold text-stone-900 uppercase tracking-wider">
-                      Sizes & Variants (e.g. Small / Large, Single / Double, 2 / 5 / 9 pcs)
+                      Sizes & Variants
                     </label>
                     <span className="text-[11px] text-stone-500">
                       If configured, customers choose size before adding to cart.
@@ -573,7 +573,7 @@ export function AdminMenu() {
                 <div className="flex items-center gap-2 pt-1">
                   <input
                     type="text"
-                    placeholder="Size name (e.g. Small (S) or 5 pcs)"
+                    placeholder="Size or portion name"
                     value={newVarName}
                     onChange={e => setNewVarName(e.target.value)}
                     className="flex-1 px-3 py-1.5 border border-stone-200 rounded-xl text-xs focus:outline-none"
@@ -619,7 +619,7 @@ export function AdminMenu() {
                     type="url"
                     value={editingItem.imageUrl || ''}
                     onChange={e => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
-                    placeholder="https://images.unsplash.com/..."
+                    placeholder="Image URL"
                     className="flex-1 px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600"
                   />
                   <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold rounded-xl cursor-pointer">
@@ -656,7 +656,7 @@ export function AdminMenu() {
                     type="text"
                     value={editingItem.ingredients || ''}
                     onChange={e => setEditingItem({ ...editingItem, ingredients: e.target.value })}
-                    placeholder="e.g. Patty, mozzarella, herb mayo, sesame bun"
+                    placeholder="Ingredients list"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                   />
                 </div>
@@ -669,7 +669,7 @@ export function AdminMenu() {
                     type="text"
                     value={editingItem.servingInfo || ''}
                     onChange={e => setEditingItem({ ...editingItem, servingInfo: e.target.value })}
-                    placeholder="e.g. Available in Small (S) & Large (L)"
+                    placeholder="Serving portion or pack size"
                     className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                   />
                 </div>

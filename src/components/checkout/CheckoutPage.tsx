@@ -360,7 +360,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Ramesh Kumar"
+                        placeholder="Full name"
                         value={customerName}
                         onChange={e => {
                           setCustomerName(e.target.value);
@@ -424,7 +424,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Flat 302, House 14"
+                        placeholder="House number, flat, or shop"
                         value={houseFlat}
                         onChange={e => {
                           setHouseFlat(e.target.value);
@@ -451,7 +451,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                       <input
                         type="text"
                         required
-                        placeholder="e.g. Arya Samaj Chowk, Bagaha Dhala"
+                        placeholder="Street, road, or area locality"
                         value={streetArea}
                         onChange={e => {
                           setStreetArea(e.target.value);
@@ -477,7 +477,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. Near Jockey Showroom"
+                      placeholder="Nearby landmark"
                       value={landmark}
                       onChange={e => setLandmark(e.target.value)}
                       className="w-full px-3.5 py-2.5 text-xs sm:text-sm border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -505,6 +505,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                       type="text"
                       required
                       maxLength={6}
+                      placeholder="6-digit PIN code"
                       value={pincode}
                       onChange={e => {
                         setPincode(e.target.value);
@@ -528,7 +529,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Call when outside, extra dip, don't ring bell"
+                    placeholder="Special delivery notes or directions"
                     value={deliveryInstructions}
                     onChange={e => setDeliveryInstructions(e.target.value)}
                     className="w-full px-3.5 py-2.5 text-xs sm:text-sm border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"
