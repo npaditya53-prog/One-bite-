@@ -121,7 +121,7 @@ export const DeliveryLogin: React.FC<DeliveryLoginProps> = ({
                   type="text"
                   autoComplete="username"
                   required
-                  placeholder="delivery@onebitemotihari.in"
+                  placeholder="yoonekaditya.ai@gmail.com"
                   value={identifier}
                   onChange={e => {
                     setIdentifier(e.target.value);

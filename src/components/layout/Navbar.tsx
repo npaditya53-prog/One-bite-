@@ -1,8 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { OneBiteLogo } from '../common/OneBiteLogo.tsx';
-import { Menu, X, Phone, ShoppingBag, Shield, ArrowRight } from 'lucide-react';
-import { SoundToggle } from '../common/SoundToggle.tsx';
+import {
+  Menu,
+  X,
+  Phone,
+  ShoppingBag,
+  Shield,
+  Truck,
+  Home,
+  UtensilsCrossed,
+  Tag,
+  MessageCircle,
+  ArrowRight,
+  Info,
+  Image,
+  Star,
+  MapPin,
+} from 'lucide-react';
 
 interface NavbarProps {
   currentView: string;
@@ -12,7 +27,7 @@ interface NavbarProps {
 export function Navbar({ currentView, onNavigate }: NavbarProps) {
   const { settings, openStatus, isAdmin, cart, setIsCartOpen } = useRestaurant();
   const [isScrolled, setIsScrolled] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,9 +37,9 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Lock background scroll when mobile drawer is open
+  // Lock body scroll when drawer is open on mobile
   useEffect(() => {
-    if (mobileMenuOpen) {
+    if (menuOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -32,27 +47,58 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [mobileMenuOpen]);
+  }, [menuOpen]);
 
-  const navLinks = [
-    { label: 'Home', view: 'home' },
-    { label: 'Menu', view: 'menu' },
-    { label: 'About', view: 'about' },
-    { label: 'Gallery', view: 'gallery' },
-    { label: 'Reviews', view: 'reviews' },
-    { label: 'Location', view: 'location' },
-    { label: 'Contact', view: 'contact' },
-  ];
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleLinkClick = (view: string) => {
-    setMobileMenuOpen(false);
+    setMenuOpen(false);
     onNavigate(view);
+  };
+
+  const handleSpecialOffers = () => {
+    setMenuOpen(false);
+    if (currentView === 'home') {
+      const el = document.getElementById('offers');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        return;
+      }
+    }
+    onNavigate('home');
+    setTimeout(() => {
+      const el = document.getElementById('offers');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 150);
+  };
+
+  const handleContactWhatsApp = () => {
+    setMenuOpen(false);
+    onNavigate('contact');
   };
 
   const cleanPhone = settings.whatsapp ? settings.whatsapp.replace(/[^0-9]/g, '') : '';
   const orderUrl = cleanPhone
     ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent('Hello One Bite Motihari, I would like to place an order.')}`
     : settings.orderUrl;
+
+  const secondaryLinks = [
+    { label: 'About Us', view: 'about', icon: Info },
+    { label: 'Gallery', view: 'gallery', icon: Image },
+    { label: 'Reviews', view: 'reviews', icon: Star },
+    { label: 'Location & Hours', view: 'location', icon: MapPin },
+  ];
 
   return (
     <header
@@ -75,19 +121,42 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
 
           {/* Desktop Navigation Links */}
           <nav className="hidden lg:flex items-center gap-6">
-            {navLinks.map(link => (
-              <button
-                key={link.view}
-                onClick={() => handleLinkClick(link.view)}
-                className={`text-sm font-semibold transition-colors cursor-pointer py-1 ${
-                  currentView === link.view
-                    ? 'text-amber-400 border-b-2 border-amber-400'
-                    : 'text-stone-300 hover:text-white'
-                }`}
-              >
-                {link.label}
-              </button>
-            ))}
+            <button
+              onClick={() => handleLinkClick('home')}
+              className={`text-sm font-semibold transition-colors cursor-pointer py-1 ${
+                currentView === 'home'
+                  ? 'text-amber-400 border-b-2 border-amber-400'
+                  : 'text-stone-300 hover:text-white'
+              }`}
+            >
+              Home
+            </button>
+            <button
+              onClick={() => handleLinkClick('menu')}
+              className={`text-sm font-semibold transition-colors cursor-pointer py-1 ${
+                currentView === 'menu'
+                  ? 'text-amber-400 border-b-2 border-amber-400'
+                  : 'text-stone-300 hover:text-white'
+              }`}
+            >
+              Explore Menu
+            </button>
+            <button
+              onClick={handleSpecialOffers}
+              className="text-sm font-semibold text-stone-300 hover:text-white transition-colors cursor-pointer py-1"
+            >
+              Special Offers
+            </button>
+            <button
+              onClick={handleContactWhatsApp}
+              className={`text-sm font-semibold transition-colors cursor-pointer py-1 ${
+                currentView === 'contact'
+                  ? 'text-amber-400 border-b-2 border-amber-400'
+                  : 'text-stone-300 hover:text-white'
+              }`}
+            >
+              Contact / WhatsApp
+            </button>
 
             {isAdmin && (
               <button
@@ -101,7 +170,7 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
             )}
           </nav>
 
-          {/* Desktop Right CTA Bar */}
+          {/* Right Action Bar (Desktop) */}
           <div className="hidden lg:flex items-center gap-3">
             {/* Status dot */}
             <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-stone-900 border border-stone-800 text-stone-300">
@@ -123,9 +192,6 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
                 <span>{settings.phone}</span>
               </a>
             )}
-
-            {/* Sound Effects Mute / Unmute Toggle */}
-            <SoundToggle showLabel />
 
             {/* Cart Button */}
             <button
@@ -154,22 +220,24 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
               <span>ADMIN LOGIN</span>
             </button>
 
-            {isAdmin && (
-              <button
-                onClick={() => handleLinkClick('admin')}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-950/60 text-amber-300 border border-amber-800/80 hover:bg-amber-900/60 text-xs font-semibold transition-colors cursor-pointer"
-                title="Admin Panel"
-              >
-                <Shield className="w-3.5 h-3.5 text-amber-400" />
-                <span>Admin CMS</span>
-              </button>
-            )}
+            {/* Desktop Hamburger Button (☰) */}
+            <button
+              type="button"
+              onClick={() => setMenuOpen(!menuOpen)}
+              className={`p-2 rounded-xl border transition-colors cursor-pointer flex items-center justify-center ${
+                menuOpen
+                  ? 'bg-amber-600 text-white border-amber-500'
+                  : 'bg-stone-900 hover:bg-stone-800 text-stone-200 hover:text-white border-stone-800'
+              }`}
+              aria-label={menuOpen ? 'Close Navigation Menu' : 'Open Navigation Menu'}
+              title="Main Menu"
+            >
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
 
           {/* Mobile & Tablet Right Controls (< 1024px) */}
           <div className="flex lg:hidden items-center gap-1.5">
-            <SoundToggle />
-
             <button
               type="button"
               onClick={() => onNavigate('admin')}
@@ -192,88 +260,267 @@ export function Navbar({ currentView, onNavigate }: NavbarProps) {
               </a>
             )}
 
+            {/* Mobile Hamburger Button (☰) */}
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg bg-stone-900 text-stone-200 hover:text-white border border-stone-800 cursor-pointer"
-              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              onClick={() => setMenuOpen(!menuOpen)}
+              className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                menuOpen
+                  ? 'bg-amber-600 text-white border-amber-500'
+                  : 'bg-stone-900 text-stone-200 hover:text-white border-stone-800'
+              }`}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              title="Open Navigation Menu"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden bg-stone-950 border-b border-stone-800 px-4 pt-3 pb-6 animate-in slide-in-from-top-2 duration-200">
-          <div className="space-y-1 mb-6">
-            {navLinks.map(link => (
-              <button
-                key={link.view}
-                onClick={() => handleLinkClick(link.view)}
-                className={`w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold transition-colors flex items-center justify-between ${
-                  currentView === link.view
-                    ? 'bg-amber-600/20 text-amber-400 font-bold'
-                    : 'text-stone-300 hover:bg-stone-900 hover:text-white'
-                }`}
-              >
-                <span>{link.label}</span>
-                <ArrowRight className="w-4 h-4 opacity-40" />
-              </button>
-            ))}
+      {/* Hamburger Navigation Drawer / Dropdown (Mobile & Desktop) */}
+      {menuOpen && (
+        <div className="fixed inset-0 top-[65px] z-50 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={() => setMenuOpen(false)}
+            aria-hidden="true"
+          />
 
-            {isAdmin && (
-              <button
-                onClick={() => handleLinkClick('admin')}
-                className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-amber-400 hover:bg-stone-900 flex items-center justify-between cursor-pointer"
-              >
-                <span className="flex items-center gap-2">
-                  <Shield className="w-4 h-4" />
-                  <span>Admin CMS Portal</span>
+          {/* Drawer Menu Panel */}
+          <div className="relative w-full sm:w-96 max-w-full bg-stone-950 border-l border-stone-800 h-[calc(100vh-65px)] overflow-y-auto px-5 py-6 flex flex-col justify-between shadow-2xl animate-in slide-in-from-right duration-200">
+            <div>
+              {/* Header inside drawer */}
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-stone-800/80">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                  Navigation Menu
                 </span>
-                <ArrowRight className="w-4 h-4 opacity-40" />
-              </button>
-            )}
-          </div>
+                <button
+                  onClick={() => setMenuOpen(false)}
+                  className="p-1 rounded-lg text-stone-400 hover:text-white hover:bg-stone-900 transition-colors cursor-pointer"
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-          <div className="pt-4 border-t border-stone-800/80 flex flex-col gap-3 text-xs text-stone-400">
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-stone-500'
-                }`}
-              />
-              <span className="font-medium text-stone-200">{openStatus.statusText}</span>
+              {/* Core 6 Hamburger Menu Options as Requested */}
+              <div className="space-y-1.5">
+                {/* 1. Home */}
+                <button
+                  type="button"
+                  onClick={() => handleLinkClick('home')}
+                  className={`w-full text-left py-3 px-3.5 rounded-2xl text-sm font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                    currentView === 'home'
+                      ? 'bg-amber-600/20 text-amber-400 font-bold border border-amber-600/30'
+                      : 'text-stone-200 hover:bg-stone-900 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-stone-900 flex items-center justify-center text-amber-400 border border-stone-800">
+                      <Home className="w-4 h-4" />
+                    </span>
+                    <span>Home</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 opacity-40" />
+                </button>
+
+                {/* 2. Explore Menu */}
+                <button
+                  type="button"
+                  onClick={() => handleLinkClick('menu')}
+                  className={`w-full text-left py-3 px-3.5 rounded-2xl text-sm font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                    currentView === 'menu'
+                      ? 'bg-amber-600/20 text-amber-400 font-bold border border-amber-600/30'
+                      : 'text-stone-200 hover:bg-stone-900 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-stone-900 flex items-center justify-center text-amber-400 border border-stone-800">
+                      <UtensilsCrossed className="w-4 h-4" />
+                    </span>
+                    <span>Explore Menu</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 opacity-40" />
+                </button>
+
+                {/* 3. Special Offers */}
+                <button
+                  type="button"
+                  onClick={handleSpecialOffers}
+                  className="w-full text-left py-3 px-3.5 rounded-2xl text-sm font-semibold text-stone-200 hover:bg-stone-900 hover:text-white transition-all flex items-center justify-between cursor-pointer"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-amber-950/60 flex items-center justify-center text-amber-400 border border-amber-800/80">
+                      <Tag className="w-4 h-4" />
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span>Special Offers</span>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Deals
+                      </span>
+                    </span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 opacity-40" />
+                </button>
+
+                {/* 4. Contact / WhatsApp */}
+                <button
+                  type="button"
+                  onClick={handleContactWhatsApp}
+                  className={`w-full text-left py-3 px-3.5 rounded-2xl text-sm font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                    currentView === 'contact'
+                      ? 'bg-amber-600/20 text-amber-400 font-bold border border-amber-600/30'
+                      : 'text-stone-200 hover:bg-stone-900 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-emerald-950/60 flex items-center justify-center text-emerald-400 border border-emerald-800/80">
+                      <MessageCircle className="w-4 h-4" />
+                    </span>
+                    <span>Contact / WhatsApp</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 opacity-40" />
+                </button>
+
+                {/* Divider between public browsing and portal logins */}
+                <div className="pt-2 pb-1 border-t border-stone-800/80 my-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 px-3">
+                    Portals & Management
+                  </span>
+                </div>
+
+                {/* 5. Admin Login */}
+                <button
+                  type="button"
+                  onClick={() => handleLinkClick('admin')}
+                  className={`w-full text-left py-3 px-3.5 rounded-2xl text-sm font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                    currentView === 'admin'
+                      ? 'bg-amber-600 text-white font-bold'
+                      : 'text-amber-300 bg-amber-950/40 hover:bg-amber-900/50 border border-amber-800/60'
+                  }`}
+                  title="Admin Portal Login"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-amber-900/60 flex items-center justify-center text-amber-300 border border-amber-700/60">
+                      <Shield className="w-4 h-4" />
+                    </span>
+                    <span>Admin Login</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 opacity-60" />
+                </button>
+
+                {/* 6. Delivery Boy Login */}
+                <button
+                  type="button"
+                  onClick={() => handleLinkClick('delivery-login')}
+                  className={`w-full text-left py-3 px-3.5 rounded-2xl text-sm font-semibold transition-all flex items-center justify-between cursor-pointer ${
+                    currentView === 'delivery-login'
+                      ? 'bg-amber-600 text-white font-bold'
+                      : 'text-sky-300 bg-sky-950/40 hover:bg-sky-900/50 border border-sky-800/60'
+                  }`}
+                  title="Delivery Boy Login Portal"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-8 h-8 rounded-xl bg-sky-900/60 flex items-center justify-center text-sky-300 border border-sky-700/60">
+                      <Truck className="w-4 h-4" />
+                    </span>
+                    <span>Delivery Boy Login</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 opacity-60" />
+                </button>
+
+                {/* Admin CMS shortcut if already authenticated */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleLinkClick('admin')}
+                    className="w-full text-left py-2.5 px-3.5 rounded-xl text-xs font-bold text-amber-400 bg-stone-900 hover:bg-stone-800 flex items-center justify-between cursor-pointer border border-amber-800/50 mt-1"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Admin CMS Portal (Active Session)</span>
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 opacity-40" />
+                  </button>
+                )}
+              </div>
+
+              {/* Secondary Restaurant Info Links */}
+              <div className="mt-5 pt-4 border-t border-stone-800/80">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block mb-2 px-1">
+                  More Pages
+                </span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {secondaryLinks.map(sec => {
+                    const SecIcon = sec.icon;
+                    return (
+                      <button
+                        key={sec.view}
+                        type="button"
+                        onClick={() => handleLinkClick(sec.view)}
+                        className={`text-left py-2 px-2.5 rounded-xl text-xs font-medium transition-colors flex items-center gap-2 cursor-pointer ${
+                          currentView === sec.view
+                            ? 'bg-amber-600/20 text-amber-400 font-bold'
+                            : 'text-stone-400 hover:bg-stone-900 hover:text-stone-200'
+                        }`}
+                      >
+                        <SecIcon className="w-3.5 h-3.5 text-stone-500" />
+                        <span>{sec.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-2 pt-1 border-t border-stone-900">
-              {settings.phone && (
-                <a
-                  href={`tel:${settings.phone.replace(/[^0-9+]/g, '')}`}
-                  className="inline-flex items-center gap-2 text-stone-300 hover:text-amber-400 font-semibold"
-                  title="Call Restaurant Directly"
-                >
-                  <Phone className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{settings.phone}</span>
-                </a>
-              )}
+            {/* Bottom Restaurant Info & Call Actions */}
+            <div className="pt-4 border-t border-stone-800/80 flex flex-col gap-3 text-xs text-stone-400">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-stone-500'
+                  }`}
+                />
+                <span className="font-semibold text-stone-200">{openStatus.statusText}</span>
+              </div>
 
-              {settings.email && (
-                <a
-                  href={`mailto:${settings.email}`}
-                  className="inline-flex items-center gap-2 text-stone-300 hover:text-amber-400 font-semibold"
-                  title="Send Email to Restaurant"
-                >
-                  <span className="text-amber-400 font-bold">@</span>
-                  <span>{settings.email}</span>
-                </a>
-              )}
+              <div className="flex flex-col gap-2 pt-2 border-t border-stone-900">
+                {settings.phone && (
+                  <a
+                    href={`tel:${settings.phone.replace(/[^0-9+]/g, '')}`}
+                    className="inline-flex items-center gap-2 text-stone-300 hover:text-amber-400 font-semibold"
+                    title="Call Restaurant Directly"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-amber-400" />
+                    <span>{settings.phone}</span>
+                  </a>
+                )}
+
+                {orderUrl && (
+                  <a
+                    href={orderUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-semibold"
+                    title="Chat on WhatsApp"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>WhatsApp Order Chat</span>
+                  </a>
+                )}
+              </div>
+
+              <div className="text-[11px] text-stone-500 leading-relaxed">
+                {settings.address}, {settings.city}
+              </div>
             </div>
-
-            <div className="text-[11px] text-stone-500">{settings.address}, {settings.city}</div>
           </div>
         </div>
       )}
     </header>
   );
 }
+
+
+

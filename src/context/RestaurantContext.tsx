@@ -737,20 +737,32 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   const loginWithGoogle = async () => {
     try {
       const user = await signInWithGoogle();
-      // Securely verify admin identity on server before granting admin privileges
-      const authRes = await api.loginFirebaseUser(user.email || undefined, user.phoneNumber || undefined);
-      setFirebaseUser(user);
-      setIsAdmin(true);
-      setAdminUser(authRes.user);
       try {
-        const ords = await api.getOrders();
-        setOrders(ords);
-      } catch (e) {
-        console.warn('Orders fetch on google sign-in:', e);
+        // Securely verify admin identity on server before granting admin privileges
+        const authRes = await api.loginFirebaseUser(user.email || undefined, user.phoneNumber || undefined);
+        setFirebaseUser(user);
+        setIsAdmin(true);
+        setAdminUser(authRes.user);
+        try {
+          const ords = await api.getOrders();
+          setOrders(ords);
+        } catch (e) {
+          console.warn('Orders fetch on google sign-in:', e);
+        }
+      } catch (authErr: any) {
+        // If server denies authorization, immediately sign out from Firebase
+        await signOutUser().catch(() => {});
+        throw authErr;
       }
     } catch (err: any) {
       if (err?.code === 'auth/popup-closed-by-user') {
-        throw new Error('Google sign-in was cancelled.');
+        throw new Error('Google sign-in was cancelled before completion.');
+      }
+      if (err?.code === 'auth/popup-blocked') {
+        throw new Error('Sign-in popup was blocked by your browser. Please allow popups for this site and try again.');
+      }
+      if (err?.code === 'auth/network-request-failed') {
+        throw new Error('Network error during Google sign-in. Please check your internet connection.');
       }
       throw err;
     }

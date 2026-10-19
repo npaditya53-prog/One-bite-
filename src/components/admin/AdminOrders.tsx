@@ -334,19 +334,6 @@ export function AdminOrders() {
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>+ Manual WhatsApp Order</span>
           </button>
-
-          {/* Quick link to Delivery Panel */}
-          <a
-            href="/delivery-dashboard"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs sm:text-sm font-bold border border-stone-700 transition-colors cursor-pointer"
-            title="Open the separate Delivery Boy Panel in a new tab"
-          >
-            <Truck className="w-4 h-4 text-amber-400" />
-            <span>Open Delivery Panel</span>
-            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
-          </a>
         </div>
       </div>
 
@@ -693,56 +680,13 @@ export function AdminOrders() {
                           <option value="cancelled">Cancelled</option>
                         </select>
                       </div>
-
-                      {/* Section: Pay on Delivery Status */}
-                      <div className="space-y-1">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block">
-                          Pay on Delivery
-                        </span>
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            disabled={isUpdating || !isPaid}
-                            onClick={() => handlePaymentStatusChange(order.id, 'unpaid')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                              !isPaid
-                                ? 'bg-amber-600 text-white'
-                                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                            }`}
-                          >
-                            Unpaid
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isUpdating || isPaid}
-                            onClick={() => handlePaymentStatusChange(order.id, 'paid')}
-                            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                              isPaid
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                            }`}
-                          >
-                            Paid
-                          </button>
-                        </div>
-                      </div>
                     </div>
 
                     {/* Communication buttons */}
-                    <div className="space-y-2 pt-2 border-t border-stone-100">
-                      <button
-                        type="button"
-                        onClick={() => openWhatsAppConfirmation(order)}
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors cursor-pointer"
-                        title="Send confirmation message to customer on WhatsApp"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>Confirm to Customer</span>
-                      </button>
-
+                    <div className="pt-2 border-t border-stone-100">
                       <a
                         href={`tel:${order.customerPhone}`}
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-semibold text-xs transition-colors"
+                        className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-xs transition-colors"
                       >
                         <Phone className="w-3.5 h-3.5" />
                         <span>Call Customer</span>

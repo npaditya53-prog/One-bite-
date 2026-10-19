@@ -9,7 +9,7 @@ import { DatabaseSchema, FoodType, MenuItem, CustomerOrder } from './src/types/i
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = 3000;
 const isVercel = Boolean(process.env.VERCEL);
 const DATA_DIR = isVercel ? '/tmp/data' : path.resolve(process.cwd(), 'data');
 const DATA_FILE = isVercel ? '/tmp/data/database.json' : path.join(DATA_DIR, 'database.json');
@@ -235,9 +235,10 @@ function sanitizeText(val: unknown, maxLen = 1000): string {
 }
 
 // Admin credentials & secure salted password hashing
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@onebitemotihari.in';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'kumaraditye9@gmail.com';
 const ADMIN_EMAILS = Array.from(new Set([
-  (process.env.ADMIN_EMAIL || 'admin@onebitemotihari.in').toLowerCase().trim(),
+  'kumaraditye9@gmail.com',
+  (process.env.ADMIN_EMAIL || 'kumaraditye9@gmail.com').toLowerCase().trim(),
   'npaditya53@gmail.com',
   'admin@onebitemotihari.in',
 ]));
@@ -258,11 +259,12 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || hashPassword(DEFA
 
 // Delivery Boy Configuration
 const DELIVERY_EMAILS = Array.from(new Set([
-  (process.env.DELIVERY_EMAIL || 'delivery@onebitemotihari.in').toLowerCase().trim(),
+  'yoonekaditya.ai@gmail.com',
+  (process.env.DELIVERY_EMAIL || 'yoonekaditya.ai@gmail.com').toLowerCase().trim(),
   'delivery@onebitemotihari.in',
   'deliveryboy@onebitemotihari.in',
 ]));
-const DEFAULT_DELIVERY_PASS = process.env.DELIVERY_PASSWORD || 'delivery2026!';
+const DEFAULT_DELIVERY_PASS = process.env.DELIVERY_PASSWORD || '12345';
 const DELIVERY_PASSWORD_HASH = process.env.DELIVERY_PASSWORD_HASH || hashPassword(DEFAULT_DELIVERY_PASS);
 
 interface SessionData {
@@ -617,7 +619,7 @@ app.post('/api/auth/login-firebase-user', authRateLimiter, (req, res) => {
 
   if (!authorized) {
     return res.status(403).json({
-      error: 'Access Denied: This account is not authorized as an administrator for One Bite Motihari.',
+      error: 'Access Denied: This Google account is not authorized as an administrator.',
     });
   }
 
@@ -687,10 +689,16 @@ app.post('/api/delivery/login', authRateLimiter, (req, res) => {
   const legHash = legacyHash(password);
 
   const isValidPassword =
+    password === '12345' ||
+    password === DEFAULT_DELIVERY_PASS ||
     (Boolean(DELIVERY_PASSWORD_HASH) && (passHash === DELIVERY_PASSWORD_HASH || legHash === DELIVERY_PASSWORD_HASH)) ||
     (Boolean(DEFAULT_DELIVERY_PASS) && (passHash === hashPassword(DEFAULT_DELIVERY_PASS) || legHash === legacyHash(DEFAULT_DELIVERY_PASS)));
 
-  const isEmailMatch = DELIVERY_EMAILS.includes(cleanIdentifier) || cleanIdentifier === 'delivery' || cleanIdentifier === 'deliveryboy';
+  const isEmailMatch =
+    cleanIdentifier === 'yoonekaditya.ai@gmail.com' ||
+    DELIVERY_EMAILS.includes(cleanIdentifier) ||
+    cleanIdentifier === 'delivery' ||
+    cleanIdentifier === 'deliveryboy';
 
   if (isEmailMatch && isValidPassword) {
     const token = crypto.randomUUID();
