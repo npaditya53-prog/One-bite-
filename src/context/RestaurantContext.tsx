@@ -28,6 +28,8 @@ import {
   saveOrderToFirestore,
   assignOrderInFirestore,
   unassignOrderInFirestore,
+  fetchCustomerOrdersFromFirestore,
+  updateOrderStatusInFirestore,
 } from '../services/firebase.ts';
 import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import {
@@ -92,13 +94,19 @@ interface RestaurantContextType {
     notes?: string;
   }) => Promise<{ success: boolean; whatsappUrl: string; order: CustomerOrder }>;
 
+  // Customer Orders & Account
+  customerOrders: CustomerOrder[];
+  customerOrdersLoading: boolean;
+  loadCustomerOrders: () => Promise<CustomerOrder[]>;
+  authInitialized: boolean;
+
   // Admin Actions
   refreshData: () => Promise<void>;
   setIsAdmin: (isAdmin: boolean) => void;
   setAdminUser: (user: any) => void;
   loginWithMagicToken: (token: string) => Promise<void>;
   login: (email: string, pass: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: () => Promise<{ user: User; isAdmin: boolean }>;
   loginWithMobile: (phone: string, otp: string) => Promise<void>;
   loginWithFirebasePhone: (phone: string, firebaseUser: User) => Promise<void>;
   checkAdminPhone: (phone: string) => Promise<{ authorized: boolean; phone?: string }>;
@@ -121,7 +129,7 @@ interface RestaurantContextType {
   saveBusinessHours: (hours: BusinessDayHours[]) => Promise<void>;
   uploadImage: (data: string, filename?: string) => Promise<string>;
   resetToDefaults: () => Promise<void>;
-  updateOrderStatus: (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid') => Promise<void>;
+  updateOrderStatus: (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid', note?: string) => Promise<void>;
   updateOrderPaymentStatus: (id: string, paymentStatus: 'unpaid' | 'paid') => Promise<void>;
   assignOrderToDeliveryBoy: (orderId: string) => Promise<void>;
   unassignOrderFromDeliveryBoy: (orderId: string) => Promise<void>;
@@ -180,6 +188,63 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     setCelebrationOrder(null);
   }, []);
 
+  const [authInitialized, setAuthInitialized] = useState(false);
+  const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
+
+  const getLocalOrderIds = useCallback((): string[] => {
+    try {
+      const raw = localStorage.getItem('onebite_customer_order_ids');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const addLocalOrderId = useCallback((orderId: string) => {
+    try {
+      const existing = getLocalOrderIds();
+      const updated = Array.from(new Set([orderId, ...existing])).slice(0, 50);
+      localStorage.setItem('onebite_customer_order_ids', JSON.stringify(updated));
+    } catch {}
+  }, [getLocalOrderIds]);
+
+  const loadCustomerOrders = useCallback(async (): Promise<CustomerOrder[]> => {
+    setCustomerOrdersLoading(true);
+    try {
+      const localIds = getLocalOrderIds();
+      const uid = firebaseUser?.uid;
+
+      let apiOrders: CustomerOrder[] = [];
+      try {
+        apiOrders = await api.getMyOrders(uid, localIds);
+      } catch (e) {
+        console.warn('API getMyOrders error:', e);
+      }
+
+      let firestoreOrders: CustomerOrder[] = [];
+      if (uid) {
+        try {
+          firestoreOrders = await fetchCustomerOrdersFromFirestore(uid);
+        } catch (e) {
+          console.warn('Firestore fetchCustomerOrders error:', e);
+        }
+      }
+
+      const orderMap = new Map<string, CustomerOrder>();
+      firestoreOrders.forEach(o => orderMap.set(o.id, o));
+      apiOrders.forEach(o => orderMap.set(o.id, o));
+
+      const merged = Array.from(orderMap.values());
+      merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+      setCustomerOrders(merged);
+      return merged;
+    } finally {
+      setCustomerOrdersLoading(false);
+    }
+  }, [firebaseUser, getLocalOrderIds]);
+
   // Listen to Firebase Auth state with secure server-side admin authorization check
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -195,15 +260,24 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
           } catch (e) {
             console.warn('Orders fetch on auth sync:', e);
           }
-        } catch (err: any) {
-          console.warn('Firebase user is not an authorized administrator:', err?.message);
+        } catch {
+          // Normal customer
           setIsAdmin(false);
           setAdminUser(null);
         }
+      } else {
+        setIsAdmin(false);
+        setAdminUser(null);
       }
+      setAuthInitialized(true);
     });
     return () => unsub();
   }, []);
+
+  // Sync customer orders when user or auth changes
+  useEffect(() => {
+    loadCustomerOrders();
+  }, [firebaseUser, loadCustomerOrders]);
 
   // Cart State
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -583,6 +657,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         id: orderRef,
         customerName: customer.customerName,
         customerPhone: customer.customerPhone,
+        customerUid: firebaseUser?.uid || undefined,
+        customerEmail: firebaseUser?.email || undefined,
         orderType,
         houseFlat: customer.houseFlat,
         streetArea: customer.streetArea,
@@ -641,7 +717,12 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       }
 
       const finalOrder = createdOrder;
+      addLocalOrderId(finalOrder.id);
       setOrders(prev => {
+        const filtered = prev.filter(o => o.id !== finalOrder.id);
+        return [finalOrder, ...filtered];
+      });
+      setCustomerOrders(prev => {
         const filtered = prev.filter(o => o.id !== finalOrder.id);
         return [finalOrder, ...filtered];
       });
@@ -734,26 +815,35 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (): Promise<{ user: User; isAdmin: boolean }> => {
     try {
       const user = await signInWithGoogle();
+      setFirebaseUser(user);
+      let isAdminVerified = false;
+
       try {
         // Securely verify admin identity on server before granting admin privileges
         const authRes = await api.loginFirebaseUser(user.email || undefined, user.phoneNumber || undefined);
-        setFirebaseUser(user);
         setIsAdmin(true);
         setAdminUser(authRes.user);
+        isAdminVerified = true;
         try {
           const ords = await api.getOrders();
           setOrders(ords);
         } catch (e) {
           console.warn('Orders fetch on google sign-in:', e);
         }
-      } catch (authErr: any) {
-        // If server denies authorization, immediately sign out from Firebase
-        await signOutUser().catch(() => {});
-        throw authErr;
+      } catch {
+        // Firebase user is not an administrator — user is authenticated as a customer!
+        setIsAdmin(false);
+        setAdminUser(null);
+        isAdminVerified = false;
       }
+
+      // Load customer orders for this user
+      loadCustomerOrders();
+
+      return { user, isAdmin: isAdminVerified };
     } catch (err: any) {
       if (err?.code === 'auth/popup-closed-by-user') {
         throw new Error('Google sign-in was cancelled before completion.');
@@ -964,17 +1054,19 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     await loadData();
   };
 
-  const handleUpdateOrderStatus = async (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid') => {
-    const updated = await api.updateOrderStatus(id, status, paymentStatus);
+  const handleUpdateOrderStatus = async (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid', note?: string) => {
+    const updated = await api.updateOrderStatus(id, status, paymentStatus, note);
     try {
-      const orderDocRef = doc(db, 'orders', id);
-      const updatePayload: Record<string, any> = { status };
-      if (paymentStatus) updatePayload.paymentStatus = paymentStatus;
-      await setDoc(orderDocRef, updatePayload, { merge: true });
+      await updateOrderStatusInFirestore(id, status, {
+        note,
+        paymentStatus,
+        updatedBy: adminUser?.identifier || 'Admin Console',
+      });
     } catch (fsErr: any) {
       console.warn('Firestore status update note:', fsErr?.message);
     }
     setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated, status, ...(paymentStatus ? { paymentStatus } : {}) } : o)));
+    setCustomerOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated, status, ...(paymentStatus ? { paymentStatus } : {}) } : o)));
   };
 
   const handleUpdateOrderPaymentStatus = async (id: string, paymentStatus: 'unpaid' | 'paid') => {
@@ -1048,6 +1140,10 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         error,
         isAdmin,
         adminUser,
+        customerOrders,
+        customerOrdersLoading,
+        loadCustomerOrders,
+        authInitialized,
         openStatus,
         popularItems,
         activeOffers,

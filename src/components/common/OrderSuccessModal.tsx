@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Check, MessageSquare, ArrowRight, X, Sparkles, ShoppingBag } from 'lucide-react';
+import { Check, MessageSquare, ArrowRight, X, Sparkles, ShoppingBag, Clock } from 'lucide-react';
 import { CustomerOrder } from '../../types/index.ts';
 
 interface OrderSuccessModalProps {
@@ -7,6 +7,7 @@ interface OrderSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
   onContinueBrowsing: () => void;
+  onTrackOrder?: () => void;
   whatsappUrl?: string;
 }
 
@@ -15,6 +16,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   isOpen,
   onClose,
   onContinueBrowsing,
+  onTrackOrder,
   whatsappUrl,
 }) => {
   // Prevent body scroll when modal is open
@@ -154,15 +156,30 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
 
         {/* Action Buttons */}
         <div className="space-y-2.5">
+          {/* Live Order Tracking Button */}
+          {onTrackOrder && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onTrackOrder();
+              }}
+              className="w-full py-3.5 px-6 rounded-2xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-black text-sm sm:text-base shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center justify-center gap-2 transform active:scale-[0.98]"
+            >
+              <Clock className="w-5 h-5 text-amber-200" />
+              <span>🚚 Track Order Live</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Main "Continue Browsing" Button */}
           <button
             type="button"
             onClick={onContinueBrowsing}
-            className="w-full py-3.5 px-6 rounded-2xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white font-extrabold text-sm sm:text-base shadow-lg shadow-amber-600/30 transition-all cursor-pointer flex items-center justify-center gap-2 transform active:scale-[0.98]"
+            className="w-full py-3 px-5 rounded-2xl bg-stone-900 hover:bg-stone-800 active:bg-stone-950 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
           >
-            <ShoppingBag className="w-5 h-5" />
-            <span>Continue Browsing</span>
-            <ArrowRight className="w-5 h-5" />
+            <ShoppingBag className="w-4 h-4" />
+            <span>Continue Browsing Menu</span>
           </button>
 
           {/* Secondary Action: Reopen WhatsApp if needed */}
@@ -182,3 +199,4 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
     </div>
   );
 };
+

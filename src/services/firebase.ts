@@ -27,6 +27,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   updateDoc
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -378,6 +379,85 @@ export async function markOrderDeliveredInFirestore(
   await updateDoc(orderRef, updateData);
 }
 
+/**
+ * Query orders belonging to a specific customer UID from Firebase Firestore
+ */
+export async function fetchCustomerOrdersFromFirestore(customerUid: string): Promise<any[]> {
+  if (!customerUid) return [];
+  try {
+    const ordersCol = collection(db, 'orders');
+    const q = query(ordersCol, where('customerUid', '==', customerUid));
+    const snap = await getDocs(q);
+    const results: any[] = [];
+    snap.forEach((d) => {
+      results.push({ ...d.data(), id: d.id });
+    });
+    // Sort descending by createdAt
+    results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    return results;
+  } catch (err) {
+    console.warn('Firestore fetchCustomerOrders error:', err);
+    return [];
+  }
+}
+
+/**
+ * Update order status and statusHistory in Firebase Firestore
+ */
+export async function updateOrderStatusInFirestore(
+  orderId: string,
+  newStatus: string,
+  options: {
+    note?: string;
+    updatedBy?: string;
+    paymentStatus?: 'unpaid' | 'paid';
+  } = {}
+): Promise<void> {
+  const orderRef = doc(db, 'orders', String(orderId));
+  const nowIso = new Date().toISOString();
+  const updatePayload: Record<string, any> = {
+    status: newStatus,
+  };
+
+  if (options.paymentStatus) {
+    updatePayload.paymentStatus = options.paymentStatus;
+  }
+
+  if (newStatus === 'packed') {
+    updatePayload.deliveryStatus = 'Packed';
+    updatePayload.packedAt = nowIso;
+  } else if (newStatus === 'out_for_delivery') {
+    updatePayload.deliveryStatus = 'Out for Delivery';
+    updatePayload.startedDeliveryAt = nowIso;
+  } else if (newStatus === 'delivered') {
+    updatePayload.deliveryStatus = 'Delivered';
+    updatePayload.deliveredAt = nowIso;
+    updatePayload.deliveredBy = options.updatedBy || 'Admin Console';
+  }
+
+  // Fetch current doc to append statusHistory safely
+  try {
+    const currentSnap = await getDocFromServer(orderRef);
+    if (currentSnap.exists()) {
+      const existingData = currentSnap.data();
+      const existingHistory = Array.isArray(existingData.statusHistory) ? existingData.statusHistory : [];
+      updatePayload.statusHistory = [
+        ...existingHistory,
+        {
+          status: newStatus,
+          timestamp: nowIso,
+          updatedBy: options.updatedBy || 'Admin Console',
+          note: options.note || undefined,
+        },
+      ];
+    }
+  } catch (e) {
+    console.warn('Could not read existing doc for statusHistory:', e);
+  }
+
+  await updateDoc(orderRef, updatePayload);
+}
+
 export async function signOutUser(): Promise<void> {
   await firebaseSignOut(auth);
 }
@@ -423,6 +503,7 @@ export {
   signInWithPhoneNumber,
   query,
   orderBy,
+  where,
   onSnapshot,
   doc,
   collection,

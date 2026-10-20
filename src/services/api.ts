@@ -456,17 +456,49 @@ export const api = {
     return await res.json();
   },
 
-  async updateOrderStatus(id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid'): Promise<CustomerOrder> {
+  async getMyOrders(customerUid?: string, localOrderIds?: string[]): Promise<CustomerOrder[]> {
+    const headers: Record<string, string> = {};
+    if (customerUid) {
+      headers['x-customer-uid'] = customerUid;
+    }
+    if (localOrderIds && localOrderIds.length > 0) {
+      headers['x-order-ids'] = localOrderIds.join(',');
+    }
+    const params = new URLSearchParams();
+    if (customerUid) params.set('customerUid', customerUid);
+    if (localOrderIds && localOrderIds.length > 0) params.set('orderIds', localOrderIds.join(','));
+
+    const res = await fetch(`/api/orders/my-orders?${params.toString()}`, {
+      headers,
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  },
+
+  async getOrderById(orderId: string, customerUid?: string): Promise<CustomerOrder | null> {
+    const headers: Record<string, string> = { ...getAuthHeaders() };
+    if (customerUid) {
+      headers['x-customer-uid'] = customerUid;
+    }
+    const res = await fetch(`/api/orders/${orderId}/track${customerUid ? `?customerUid=${encodeURIComponent(customerUid)}` : ''}`, {
+      headers,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  },
+
+  async updateOrderStatus(id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid', note?: string): Promise<CustomerOrder> {
     const res = await fetch(`/api/orders/${id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({ status, paymentStatus }),
+      body: JSON.stringify({ status, paymentStatus, note }),
     });
     if (!res.ok) {
-      throw new Error('Failed to update order status');
+      const err = await res.json().catch(() => ({ error: 'Failed to update order status' }));
+      throw new Error(err.error || 'Failed to update order status');
     }
     return await res.json();
   },

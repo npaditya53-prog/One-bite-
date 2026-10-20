@@ -344,6 +344,7 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
   // Update last active
   session.lastActive = now;
+  (req as any).sessionUser = session;
   next();
 }
 
@@ -1286,9 +1287,52 @@ app.put('/api/hours', requireAdmin, (req, res) => {
   return res.status(400).json({ error: 'Expected array of business hours' });
 });
 
-// 9.5 Orders Endpoints - Protected with requireDeliveryOrAdmin to allow Admin & Delivery Boy access
+// 9.5 Orders Endpoints
+// Protected with requireDeliveryOrAdmin to allow Admin & Delivery Boy access to all orders
 app.get('/api/orders', requireDeliveryOrAdmin, (_req, res) => {
   res.json(database.orders || []);
+});
+
+// Customer My Orders endpoint - returns only orders belonging to the customer
+app.get('/api/orders/my-orders', (req, res) => {
+  const customerUid = (req.headers['x-customer-uid'] || req.query.customerUid) as string | undefined;
+  const orderIdsRaw = (req.headers['x-order-ids'] || req.query.orderIds) as string | undefined;
+  const allowedOrderIds = orderIdsRaw ? orderIdsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  if (!customerUid && allowedOrderIds.length === 0) {
+    return res.json([]);
+  }
+
+  const allOrders = database.orders || [];
+  const filtered = allOrders.filter(o => {
+    if (customerUid && o.customerUid === customerUid) return true;
+    if (allowedOrderIds.includes(o.id)) return true;
+    return false;
+  });
+
+  res.json(filtered);
+});
+
+// Single order tracking endpoint
+app.get('/api/orders/:id/track', (req, res) => {
+  const { id } = req.params;
+  const customerUid = (req.headers['x-customer-uid'] || req.query.customerUid) as string | undefined;
+  const allOrders = database.orders || [];
+  const order = allOrders.find(o => o.id === id);
+
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found' });
+  }
+
+  if (order.customerUid && customerUid && order.customerUid !== customerUid) {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    const session = token ? activeSessions.get(token) : null;
+    if (!session || (session.role !== 'admin' && session.role !== 'delivery')) {
+      return res.status(403).json({ error: 'Unauthorized to view this order' });
+    }
+  }
+
+  res.json(order);
 });
 
 // Duplicate Order Prevention Cache (30-second rolling window)
@@ -1311,6 +1355,8 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
   const {
     customerName,
     customerPhone,
+    customerUid,
+    customerEmail,
     orderType,
     deliveryAddress,
     houseFlat,
@@ -1420,7 +1466,6 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
       if (isStarted && isNotExpired) {
         finalOfferTitle = offer.title;
         if (offer.offerType === 'percentage' && offer.discountValue) {
-          // Check vegetarian / non-vegetarian eligibility
           let eligibleSubtotal = authoritativeSubtotal;
           if (offer.targetType === 'veg_only') {
             eligibleSubtotal = validatedItems
@@ -1476,10 +1521,15 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     pincode ? `PIN: ${pincode}` : '',
   ].filter(Boolean).join(', ');
 
+  const initialStatus = (req.body.assignedToDeliveryBoy ? 'confirmed' : 'pending') as CustomerOrder['status'];
+  const nowIso = new Date().toISOString();
+
   const newOrder = {
     id: orderId,
     customerName: sanitizeText(customerName, 100),
     customerPhone: cleanPhone,
+    customerUid: customerUid ? sanitizeText(customerUid, 128) : undefined,
+    customerEmail: customerEmail ? sanitizeText(customerEmail, 150) : undefined,
     orderType: orderType === 'takeaway' || orderType === 'dine_in' ? orderType : 'delivery',
     houseFlat: sanitizeText(houseFlat, 100),
     streetArea: sanitizeText(streetArea, 200),
@@ -1499,18 +1549,25 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     totalAmount: authoritativeTotal,
     paymentMethod: 'pay_on_delivery' as const,
     paymentStatus: 'unpaid' as const,
-    status: (req.body.assignedToDeliveryBoy ? 'confirmed' : 'pending') as CustomerOrder['status'],
+    status: initialStatus,
     deliveryStatus: req.body.assignedToDeliveryBoy ? 'Assigned' : 'Pending',
     assignedToDeliveryBoy: Boolean(req.body.assignedToDeliveryBoy),
-    assignedAt: req.body.assignedToDeliveryBoy ? (req.body.assignedAt || new Date().toISOString()) : undefined,
+    assignedAt: req.body.assignedToDeliveryBoy ? (req.body.assignedAt || nowIso) : undefined,
     assignedBy: req.body.assignedToDeliveryBoy ? sanitizeText(req.body.assignedBy, 100) || 'Admin' : undefined,
-    createdAt: new Date().toISOString(),
+    createdAt: nowIso,
+    statusHistory: [
+      {
+        status: initialStatus,
+        timestamp: nowIso,
+        updatedBy: req.body.assignedToDeliveryBoy ? 'Admin' : 'Customer',
+        note: req.body.assignedToDeliveryBoy ? 'Order confirmed & assigned to delivery partner' : 'Order placed successfully',
+      },
+    ],
   };
 
   // Record in deduplication window
   recentOrderDeduplication.set(dedupKey, { timestamp: Date.now(), order: newOrder });
 
-  // If dry run for load testing, return validated payload without touching persistent database
   if (isLoadTestDryRun) {
     return res.status(201).json({ ...newOrder, isDryRun: true });
   }
@@ -1519,7 +1576,6 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     database.orders = [];
   }
   database.orders.unshift(newOrder);
-  // Keep memory orders bounded to prevent memory growth under long uptime
   if (database.orders.length > 500) {
     database.orders = database.orders.slice(0, 500);
   }
@@ -1529,8 +1585,8 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
 
 app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const { status, paymentStatus } = req.body;
-  const allowedStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed', 'cancelled'];
+  const { status, paymentStatus, note } = req.body;
+  const allowedStatuses = ['pending', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'completed', 'cancelled'];
 
   if (!database.orders) database.orders = [];
   const order = database.orders.find(o => o.id === id);
@@ -1538,16 +1594,35 @@ app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
     return res.status(404).json({ error: 'Order not found' });
   }
 
+  const nowIso = new Date().toISOString();
+
   if (status) {
     if (!allowedStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid order status value' });
     }
     order.status = status;
-    if (status === 'delivered') {
+
+    if (status === 'packed') {
+      order.deliveryStatus = 'Packed';
+      if (!order.packedAt) order.packedAt = nowIso;
+    } else if (status === 'out_for_delivery') {
+      order.deliveryStatus = 'Out for Delivery';
+      if (!order.startedDeliveryAt) order.startedDeliveryAt = nowIso;
+    } else if (status === 'delivered') {
       order.deliveryStatus = 'Delivered';
-      if (!order.deliveredAt) order.deliveredAt = new Date().toISOString();
+      if (!order.deliveredAt) order.deliveredAt = nowIso;
       if (!order.deliveredBy) order.deliveredBy = 'Admin Console';
     }
+
+    if (!order.statusHistory) {
+      order.statusHistory = [];
+    }
+    order.statusHistory.push({
+      status,
+      timestamp: nowIso,
+      updatedBy: (req as any).sessionUser?.identifier || (req as any).deliverySession?.identifier || 'Admin Console',
+      note: note ? sanitizeText(note, 200) : undefined,
+    });
   }
 
   if (paymentStatus) {

@@ -137,16 +137,27 @@ export interface CustomerOrder {
   totalAmount: number;
   paymentMethod?: 'pay_on_delivery';
   paymentStatus?: 'unpaid' | 'paid';
-  status: 'pending' | 'confirmed' | 'preparing' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
-  deliveryStatus?: 'Delivered' | 'Pending' | 'Out for Delivery' | 'Assigned' | string;
+  customerUid?: string;
+  customerEmail?: string;
+  status: 'pending' | 'confirmed' | 'preparing' | 'packed' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
+  statusHistory?: {
+    status: 'pending' | 'confirmed' | 'preparing' | 'packed' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
+    timestamp: string;
+    updatedBy?: string;
+    note?: string;
+  }[];
+  deliveryStatus?: 'Delivered' | 'Pending' | 'Out for Delivery' | 'Assigned' | 'Packed' | string;
   assignedToDeliveryBoy?: boolean;
   assignedAt?: string;
   assignedBy?: string;
+  packedAt?: string;
   startedDeliveryAt?: string;
   deliveredAt?: string;
   deliveredBy?: string;
   createdAt: string;
 }
+
+export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'packed' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
 
 export interface GalleryItem {
   id: string;

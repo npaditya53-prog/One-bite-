@@ -26,9 +26,15 @@ export function AdminLogin({ onSuccess, onBackToSite }: AdminLoginProps) {
     setIsLoading(true);
 
     try {
-      await loginWithGoogle();
-      showToast('Welcome back! Administrator verified.', 'success');
-      onSuccess();
+      const result = await loginWithGoogle();
+      if (result.isAdmin) {
+        showToast('Welcome back! Administrator verified.', 'success');
+        onSuccess();
+      } else {
+        const msg = 'Access Denied: This Google account is not authorized as an administrator.';
+        setErrorMsg(msg);
+        showToast(msg, 'error');
+      }
     } catch (err: any) {
       const msg = err?.message || 'Access Denied: This Google account is not authorized as an administrator.';
       setErrorMsg(msg);

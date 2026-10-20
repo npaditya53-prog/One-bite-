@@ -39,11 +39,18 @@ const DeliveryDashboard = React.lazy(() =>
 const DeliveryLogin = React.lazy(() =>
   import('./components/delivery/DeliveryLogin.tsx').then(m => ({ default: m.DeliveryLogin }))
 );
+const MyOrdersPage = React.lazy(() =>
+  import('./components/orders/MyOrdersPage.tsx').then(m => ({ default: m.MyOrdersPage }))
+);
+import { OrderTrackingModal } from './components/orders/OrderTrackingModal.tsx';
+import { CustomerOnboardingModal } from './components/auth/CustomerOnboardingModal.tsx';
+import { CustomerOrder } from './types/index.ts';
 
 function pathToView(pathname: string): string {
   if (pathname.startsWith('/admin')) return 'admin';
   if (pathname.startsWith('/delivery-login')) return 'delivery-login';
   if (pathname.startsWith('/delivery-dashboard') || pathname.startsWith('/delivery')) return 'delivery-dashboard';
+  if (pathname === '/my-orders' || pathname === '/orders') return 'my-orders';
   if (pathname === '/' || pathname === '') return 'home';
   if (pathname === '/menu') return 'menu';
   if (pathname === '/checkout') return 'checkout';
@@ -62,6 +69,7 @@ function viewToPath(view: string): string {
   if (view === 'admin') return '/admin';
   if (view === 'delivery-login') return '/delivery-login';
   if (view === 'delivery-dashboard') return '/delivery-dashboard';
+  if (view === 'my-orders') return '/my-orders';
   if (view === 'checkout') return '/checkout';
   if (view === 'privacy') return '/privacy';
   if (view === 'terms') return '/terms';
@@ -84,6 +92,8 @@ function MainContent() {
   const [currentView, setCurrentView] = useState<string>(() => {
     return pathToView(window.location.pathname);
   });
+  const [activeTrackingOrder, setActiveTrackingOrder] = useState<CustomerOrder | null>(null);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   // Initialize subtle pop sound on button clicks across the site
   useEffect(() => {
@@ -101,6 +111,10 @@ function MainContent() {
       menu: {
         title: 'Menu & Prices | One Bite Motihari',
         desc: 'Explore the complete menu of One Bite Motihari: Handcrafted burgers, fresh dough pizzas, crispy chicken buckets, potato tornados, cheesy wraps, and desserts.',
+      },
+      'my-orders': {
+        title: 'My Orders & Live Order Tracking | One Bite Motihari',
+        desc: 'View your previous orders and real-time live status tracking from One Bite Motihari.',
       },
       checkout: {
         title: 'Home Delivery Checkout | One Bite Motihari',
@@ -295,7 +309,11 @@ function MainContent() {
   return (
     <div className="min-h-screen w-full flex flex-col bg-stone-50 text-stone-900 selection:bg-amber-600 selection:text-white overflow-x-hidden">
       {/* Sticky Header */}
-      <Navbar currentView={currentView} onNavigate={navigateTo} />
+      <Navbar
+        currentView={currentView}
+        onNavigate={navigateTo}
+        onOpenOnboarding={() => setIsOnboardingOpen(true)}
+      />
 
       {/* Main Body */}
       <main className="flex-1">
@@ -332,6 +350,23 @@ function MainContent() {
             isStandalonePage
             onNavigateToCheckout={() => navigateTo('checkout')}
           />
+        )}
+
+        {/* VIEW: MY ORDERS & LIVE TRACKING */}
+        {currentView === 'my-orders' && (
+          <React.Suspense
+            fallback={
+              <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center text-white p-4">
+                <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-3" />
+                <span className="text-xs text-stone-400">Loading your orders...</span>
+              </div>
+            }
+          >
+            <MyOrdersPage
+              onBackToMenu={() => navigateTo('menu')}
+              onNavigateHome={() => navigateTo('home')}
+            />
+          </React.Suspense>
         )}
 
         {/* VIEW: ABOUT */}
@@ -410,6 +445,36 @@ function MainContent() {
         whatsappUrl={celebrationWhatsappUrl}
         onClose={dismissOrderCelebration}
         onContinueBrowsing={handleContinueBrowsing}
+        onTrackOrder={() => {
+          if (celebrationOrder) {
+            setActiveTrackingOrder(celebrationOrder);
+          }
+        }}
+      />
+
+      {/* Standalone Live Order Tracking Modal */}
+      {activeTrackingOrder && (
+        <OrderTrackingModal
+          order={activeTrackingOrder}
+          isOpen={Boolean(activeTrackingOrder)}
+          onClose={() => setActiveTrackingOrder(null)}
+          onOrderUpdated={(updated) => {
+            setActiveTrackingOrder(updated);
+          }}
+        />
+      )}
+
+      {/* Customer Google Onboarding Modal */}
+      <CustomerOnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        onSuccessRole={(role) => {
+          if (role === 'admin') {
+            navigateTo('admin');
+          } else {
+            navigateTo('my-orders');
+          }
+        }}
       />
     </div>
   );
