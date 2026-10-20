@@ -22,8 +22,6 @@ import {
   AlertCircle,
   Truck,
   RotateCcw,
-  CheckSquare,
-  Square,
   Building,
   Navigation,
 } from 'lucide-react';
@@ -63,16 +61,6 @@ export function CartDrawer() {
   // Validation errors
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Review Checklist (all 6 required)
-  const [checklist, setChecklist] = useState({
-    itemsChecked: false,
-    pricesChecked: false,
-    contactChecked: false,
-    addressChecked: false,
-    podUnderstood: false,
-    whatsappUnderstood: false,
-  });
-
   // Coupons
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [showOffersList, setShowOffersList] = useState(false);
@@ -95,29 +83,6 @@ export function CartDrawer() {
       : 0;
 
   const finalPayableTotal = Math.max(0, cartDiscount.finalTotal + deliveryCharge);
-
-  const toggleChecklist = (key: keyof typeof checklist) => {
-    setChecklist(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const checkAllChecklist = () => {
-    setChecklist({
-      itemsChecked: true,
-      pricesChecked: true,
-      contactChecked: true,
-      addressChecked: true,
-      podUnderstood: true,
-      whatsappUnderstood: true,
-    });
-  };
-
-  const isChecklistComplete =
-    checklist.itemsChecked &&
-    checklist.pricesChecked &&
-    checklist.contactChecked &&
-    checklist.addressChecked &&
-    checklist.podUnderstood &&
-    checklist.whatsappUnderstood;
 
   // Validate form fields
   const validateForm = (): boolean => {
@@ -155,10 +120,6 @@ export function CartDrawer() {
       errors.pincode = 'Enter a valid 6-digit PIN code';
     }
 
-    if (!isChecklistComplete) {
-      errors.checklist = 'Please confirm all checklist items before proceeding';
-    }
-
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -174,7 +135,7 @@ export function CartDrawer() {
     }
 
     if (!validateForm()) {
-      showToast('Please complete all required fields and checklist confirmations', 'error');
+      showToast('Please complete all required fields', 'error');
       return;
     }
 
@@ -848,127 +809,6 @@ export function CartDrawer() {
                 </div>
               </div>
 
-              {/* Order Review Checklist */}
-              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-stone-900">
-                    Order Review Checklist
-                  </h4>
-                  <button
-                    type="button"
-                    onClick={checkAllChecklist}
-                    className="text-[11px] font-bold text-amber-700 hover:text-amber-800 cursor-pointer"
-                  >
-                    Select All
-                  </button>
-                </div>
-
-                <div className="space-y-2 text-xs text-stone-700">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <button
-                      type="button"
-                      onClick={() => toggleChecklist('itemsChecked')}
-                      className="mt-0.5 text-stone-700 shrink-0 cursor-pointer"
-                      aria-label="Confirm food items and quantities"
-                    >
-                      {checklist.itemsChecked ? (
-                        <CheckSquare className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <Square className="w-4 h-4 text-stone-400" />
-                      )}
-                    </button>
-                    <span>I have checked the food items and their quantities.</span>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <button
-                      type="button"
-                      onClick={() => toggleChecklist('pricesChecked')}
-                      className="mt-0.5 text-stone-700 shrink-0 cursor-pointer"
-                      aria-label="Confirm food prices and final total"
-                    >
-                      {checklist.pricesChecked ? (
-                        <CheckSquare className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <Square className="w-4 h-4 text-stone-400" />
-                      )}
-                    </button>
-                    <span>I have checked the food prices and final total (₹{finalPayableTotal}).</span>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <button
-                      type="button"
-                      onClick={() => toggleChecklist('contactChecked')}
-                      className="mt-0.5 text-stone-700 shrink-0 cursor-pointer"
-                      aria-label="Confirm name and mobile number"
-                    >
-                      {checklist.contactChecked ? (
-                        <CheckSquare className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <Square className="w-4 h-4 text-stone-400" />
-                      )}
-                    </button>
-                    <span>My name and mobile number are correct.</span>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <button
-                      type="button"
-                      onClick={() => toggleChecklist('addressChecked')}
-                      className="mt-0.5 text-stone-700 shrink-0 cursor-pointer"
-                      aria-label="Confirm delivery address"
-                    >
-                      {checklist.addressChecked ? (
-                        <CheckSquare className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <Square className="w-4 h-4 text-stone-400" />
-                      )}
-                    </button>
-                    <span>My complete home delivery address and PIN code are correct.</span>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <button
-                      type="button"
-                      onClick={() => toggleChecklist('podUnderstood')}
-                      className="mt-0.5 text-stone-700 shrink-0 cursor-pointer"
-                      aria-label="Confirm payment on delivery"
-                    >
-                      {checklist.podUnderstood ? (
-                        <CheckSquare className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <Square className="w-4 h-4 text-stone-400" />
-                      )}
-                    </button>
-                    <span>I understand that payment will be made only when the delivery boy arrives.</span>
-                  </label>
-
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <button
-                      type="button"
-                      onClick={() => toggleChecklist('whatsappUnderstood')}
-                      className="mt-0.5 text-stone-700 shrink-0 cursor-pointer"
-                      aria-label="Confirm WhatsApp transmission"
-                    >
-                      {checklist.whatsappUnderstood ? (
-                        <CheckSquare className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <Square className="w-4 h-4 text-stone-400" />
-                      )}
-                    </button>
-                    <span>I understand that I must send the order through WhatsApp and wait for restaurant confirmation.</span>
-                  </label>
-                </div>
-
-                {fieldErrors.checklist && (
-                  <div className="flex items-center gap-1.5 text-rose-600 text-xs font-semibold pt-1">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{fieldErrors.checklist}</span>
-                  </div>
-                )}
-              </div>
-
               {/* Order Bill Summary */}
               <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200 space-y-1.5 text-xs text-stone-600">
                 <div className="flex justify-between">
@@ -1006,7 +846,7 @@ export function CartDrawer() {
               <div className="space-y-1.5 pt-1">
                 <button
                   type="submit"
-                  disabled={isSubmitting || !isChecklistComplete}
+                  disabled={isSubmitting}
                   className="w-full py-4 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:bg-stone-300 disabled:text-stone-500 disabled:cursor-not-allowed text-white font-extrabold text-sm sm:text-base shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <MessageSquare className="w-4 h-4" />
