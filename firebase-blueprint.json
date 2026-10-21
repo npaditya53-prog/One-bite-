@@ -80,7 +80,7 @@
     },
     "CustomerOrder": {
       "title": "CustomerOrder",
-      "description": "Orders placed by customers for dine-in, takeaway, or delivery",
+      "description": "Orders placed by customers for dine-in, takeaway, or delivery with full status timeline history",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
@@ -93,7 +93,17 @@
         "subtotal": { "type": "number" },
         "addonsTotal": { "type": "number" },
         "totalAmount": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "confirmed", "preparing", "completed", "cancelled"] },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "confirmed", "preparing", "packed", "out_for_delivery", "delivered", "completed", "cancelled"]
+        },
+        "deliveryStatus": { "type": "string", "maxLength": 100 },
+        "placedAt": { "type": "string", "maxLength": 100 },
+        "packedAt": { "type": "string", "maxLength": 100 },
+        "outForDeliveryAt": { "type": "string", "maxLength": 100 },
+        "deliveredAt": { "type": "string", "maxLength": 100 },
+        "deliveredBy": { "type": "string", "maxLength": 150 },
+        "updatedAt": { "type": "string", "maxLength": 100 },
         "createdAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["customerName", "customerPhone", "orderType", "totalAmount", "status", "createdAt"]

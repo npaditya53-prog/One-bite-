@@ -139,25 +139,40 @@ export interface CustomerOrder {
   paymentStatus?: 'unpaid' | 'paid';
   customerUid?: string;
   customerEmail?: string;
-  status: 'pending' | 'confirmed' | 'preparing' | 'packed' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
-  statusHistory?: {
-    status: 'pending' | 'confirmed' | 'preparing' | 'packed' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
-    timestamp: string;
-    updatedBy?: string;
-    note?: string;
-  }[];
+  status: OrderStatus;
+  statusHistory?: StatusHistoryItem[];
   deliveryStatus?: 'Delivered' | 'Pending' | 'Out for Delivery' | 'Assigned' | 'Packed' | string;
   assignedToDeliveryBoy?: boolean;
   assignedAt?: string;
   assignedBy?: string;
+  placedAt?: string;
   packedAt?: string;
+  outForDeliveryAt?: string;
   startedDeliveryAt?: string;
   deliveredAt?: string;
   deliveredBy?: string;
+  updatedAt?: string;
   createdAt: string;
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'packed' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
+export type OrderStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'preparing'
+  | 'packed'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'completed'
+  | 'cancelled';
+
+export interface StatusHistoryItem {
+  status: OrderStatus;
+  statusName?: string;
+  timestamp: string;
+  updatedBy?: string;
+  updaterId?: string;
+  note?: string;
+}
 
 export interface GalleryItem {
   id: string;

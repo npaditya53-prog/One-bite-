@@ -129,7 +129,8 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read: if isAdmin() || isDeliveryBoy() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
+      allow get: if isAdmin() || isDeliveryBoy() || (isSignedIn() && resource.data.customerUid == request.auth.uid) || isValidId(orderId);
+      allow list: if isAdmin() || isDeliveryBoy() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
       allow create: if isValidId(orderId) &&
                        isValidOrder(incoming()) &&
                        (isAdmin() || isOperatingHours()) &&

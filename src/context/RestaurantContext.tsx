@@ -42,6 +42,7 @@ import {
   getLiveOperatingStatus,
   RESTAURANT_CLOSED_MESSAGE,
 } from '../utils/operatingHours.ts';
+import { getStatusDisplayName } from '../utils/orderTimeline.ts';
 
 export interface OpenStatus {
   isOpen: boolean;
@@ -1051,19 +1052,76 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     await loadData();
   };
 
-  const handleUpdateOrderStatus = async (id: string, status: CustomerOrder['status'], paymentStatus?: 'unpaid' | 'paid', note?: string) => {
-    const updated = await api.updateOrderStatus(id, status, paymentStatus, note);
+  const handleUpdateOrderStatus = async (
+    id: string,
+    status: CustomerOrder['status'],
+    paymentStatus?: 'unpaid' | 'paid',
+    note?: string
+  ) => {
+    // 1. Authoritative Firestore transactional update
+    await updateOrderStatusInFirestore(id, status, {
+      note,
+      paymentStatus,
+      updatedBy: adminUser?.identifier || auth.currentUser?.email || 'Admin',
+      updaterId: auth.currentUser?.email || adminUser?.identifier || 'admin',
+    });
+
+    // 2. Synchronize to server API
+    let updated: CustomerOrder | null = null;
     try {
-      await updateOrderStatusInFirestore(id, status, {
-        note,
-        paymentStatus,
-        updatedBy: adminUser?.identifier || 'Admin Console',
-      });
-    } catch (fsErr: any) {
-      console.warn('Firestore status update note:', fsErr?.message);
+      updated = await api.updateOrderStatus(id, status, paymentStatus, note);
+    } catch (e) {
+      console.warn('Backend server status update sync note:', e);
     }
-    setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated, status, ...(paymentStatus ? { paymentStatus } : {}) } : o)));
-    setCustomerOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated, status, ...(paymentStatus ? { paymentStatus } : {}) } : o)));
+
+    // 3. Immediately reflect in local React context
+    const nowIso = new Date().toISOString();
+    const updateFn = (prev: CustomerOrder[]): CustomerOrder[] =>
+      prev.map(o => {
+        if (o.id !== id) return o;
+        const currentHist = Array.isArray(o.statusHistory) ? [...o.statusHistory] : [];
+        const isDuplicateHist = currentHist.some(h => h.status === status && Math.abs(new Date(h.timestamp).getTime() - Date.now()) < 5000);
+        const newHist = isDuplicateHist
+          ? currentHist
+          : [
+              ...currentHist,
+              {
+                status,
+                statusName: getStatusDisplayName(status),
+                timestamp: nowIso,
+                updatedBy: adminUser?.identifier || 'Admin',
+                note,
+              },
+            ];
+
+        const updatedOrder: CustomerOrder = {
+          ...o,
+          ...(updated || {}),
+          status,
+          updatedAt: nowIso,
+          ...(status === 'packed' ? { packedAt: o.packedAt || nowIso, deliveryStatus: 'Packed' } : {}),
+          ...(status === 'out_for_delivery'
+            ? {
+                outForDeliveryAt: o.outForDeliveryAt || nowIso,
+                startedDeliveryAt: o.startedDeliveryAt || nowIso,
+                deliveryStatus: 'Out for Delivery',
+              }
+            : {}),
+          ...(status === 'delivered'
+            ? {
+                deliveredAt: o.deliveredAt || nowIso,
+                deliveryStatus: 'Delivered',
+                paymentStatus: 'paid' as const,
+              }
+            : {}),
+          ...(paymentStatus ? { paymentStatus } : {}),
+          statusHistory: newHist,
+        };
+        return updatedOrder;
+      });
+
+    setOrders(updateFn);
+    setCustomerOrders(updateFn);
   };
 
   const handleUpdateOrderPaymentStatus = async (id: string, paymentStatus: 'unpaid' | 'paid') => {

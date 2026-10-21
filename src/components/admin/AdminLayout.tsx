@@ -42,7 +42,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     {
       id: 'orders',
-      label: pendingOrdersCount > 0 ? `Orders (${pendingOrdersCount})` : 'Orders',
+      label: pendingOrdersCount > 0 ? `Order Timeline (${pendingOrdersCount})` : 'Order Management & Live Timeline',
       icon: ShoppingBag,
     },
     { id: 'menu', label: 'Menu Items', icon: Utensils },

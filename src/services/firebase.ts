@@ -28,10 +28,12 @@ import {
   query,
   orderBy,
   where,
-  updateDoc
+  updateDoc,
+  runTransaction
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { isRestaurantOpen } from '../utils/operatingHours.ts';
+import { OrderStatus, StatusHistoryItem } from '../types/index.ts';
 
 // Initialize Firebase safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -358,13 +360,14 @@ export async function unassignOrderInFirestore(orderId: string): Promise<void> {
  */
 export async function markOrderOutForDeliveryInFirestore(
   orderId: string,
-  startedAt?: string
+  startedAt?: string,
+  options: { updatedBy?: string; updaterId?: string } = {}
 ): Promise<void> {
-  const orderRef = doc(db, 'orders', String(orderId));
-  await updateDoc(orderRef, {
-    status: 'out_for_delivery',
-    deliveryStatus: 'Out for Delivery',
-    startedDeliveryAt: startedAt || new Date().toISOString(),
+  await updateOrderStatusInFirestore(orderId, 'out_for_delivery', {
+    updatedBy: options.updatedBy || 'Delivery Boy',
+    updaterId: options.updaterId || auth.currentUser?.email || 'delivery',
+    customTimestamp: startedAt,
+    note: 'Order dispatched for delivery',
   });
 }
 
@@ -373,16 +376,15 @@ export async function markOrderOutForDeliveryInFirestore(
  */
 export async function markOrderDeliveredInFirestore(
   orderId: string,
-  deliveryData: { deliveredBy?: string; deliveredAt?: string }
+  deliveryData: { deliveredBy?: string; deliveredAt?: string; updaterId?: string }
 ): Promise<void> {
-  const orderRef = doc(db, 'orders', String(orderId));
-  const updateData = {
-    status: 'delivered',
-    deliveryStatus: 'Delivered',
-    deliveredAt: deliveryData.deliveredAt || new Date().toISOString(),
-    deliveredBy: deliveryData.deliveredBy || 'One Bite Delivery Partner',
-  };
-  await updateDoc(orderRef, updateData);
+  await updateOrderStatusInFirestore(orderId, 'delivered', {
+    updatedBy: deliveryData.deliveredBy || 'Delivery Boy',
+    updaterId: deliveryData.updaterId || auth.currentUser?.email || 'delivery',
+    customTimestamp: deliveryData.deliveredAt,
+    paymentStatus: 'paid',
+    note: 'Order delivered successfully to customer',
+  });
 }
 
 /**
@@ -408,60 +410,122 @@ export async function fetchCustomerOrdersFromFirestore(customerUid: string): Pro
 }
 
 /**
- * Update order status and statusHistory in Firebase Firestore
+ * Update order status and statusHistory atomically in Firebase Firestore using a transaction
  */
 export async function updateOrderStatusInFirestore(
   orderId: string,
-  newStatus: string,
+  newStatus: OrderStatus,
   options: {
     note?: string;
     updatedBy?: string;
+    updaterId?: string;
     paymentStatus?: 'unpaid' | 'paid';
+    customTimestamp?: string;
+    bypassTransitionCheck?: boolean;
   } = {}
 ): Promise<void> {
   const orderRef = doc(db, 'orders', String(orderId));
-  const nowIso = new Date().toISOString();
-  const updatePayload: Record<string, any> = {
-    status: newStatus,
+  const nowIso = options.customTimestamp || new Date().toISOString();
+
+  const statusNameMap: Record<string, string> = {
+    pending: 'Order Placed',
+    confirmed: 'Order Placed',
+    preparing: 'Order Placed',
+    packed: 'Order Packed',
+    out_for_delivery: 'Out for Delivery',
+    delivered: 'Delivered',
+    completed: 'Delivered',
+    cancelled: 'Order Cancelled',
   };
 
-  if (options.paymentStatus) {
-    updatePayload.paymentStatus = options.paymentStatus;
-  }
+  const statusName = statusNameMap[newStatus] || newStatus;
 
-  if (newStatus === 'packed') {
-    updatePayload.deliveryStatus = 'Packed';
-    updatePayload.packedAt = nowIso;
-  } else if (newStatus === 'out_for_delivery') {
-    updatePayload.deliveryStatus = 'Out for Delivery';
-    updatePayload.startedDeliveryAt = nowIso;
-  } else if (newStatus === 'delivered') {
-    updatePayload.deliveryStatus = 'Delivered';
-    updatePayload.deliveredAt = nowIso;
-    updatePayload.deliveredBy = options.updatedBy || 'Admin Console';
-  }
-
-  // Fetch current doc to append statusHistory safely
-  try {
-    const currentSnap = await getDocFromServer(orderRef);
-    if (currentSnap.exists()) {
-      const existingData = currentSnap.data();
-      const existingHistory = Array.isArray(existingData.statusHistory) ? existingData.statusHistory : [];
-      updatePayload.statusHistory = [
-        ...existingHistory,
-        {
-          status: newStatus,
-          timestamp: nowIso,
-          updatedBy: options.updatedBy || 'Admin Console',
-          note: options.note || undefined,
-        },
-      ];
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(orderRef);
+    if (!snap.exists()) {
+      throw new Error(`Order #${orderId} does not exist in Firebase Firestore.`);
     }
-  } catch (e) {
-    console.warn('Could not read existing doc for statusHistory:', e);
-  }
 
-  await updateDoc(orderRef, updatePayload);
+    const current = snap.data() as any;
+    const currentStatus = current.status;
+
+    // Concurrency / Idempotency check: if status is already the same, do not duplicate
+    if (currentStatus === newStatus) {
+      return;
+    }
+
+    // Validate forward transitions unless bypass flag is specified
+    if (!options.bypassTransitionCheck) {
+      if (newStatus === 'delivered' && currentStatus !== 'out_for_delivery' && currentStatus !== 'delivered') {
+        throw new Error('Invalid transition: Order must be marked "Out for Delivery" before it can be marked "Delivered".');
+      }
+      if (newStatus === 'out_for_delivery' && currentStatus !== 'packed' && currentStatus !== 'out_for_delivery') {
+        if (currentStatus === 'pending' || currentStatus === 'confirmed') {
+          throw new Error('Invalid transition: Order must be marked "Order Packed" before being dispatched Out for Delivery.');
+        }
+      }
+      if (currentStatus === 'delivered' || currentStatus === 'completed') {
+        throw new Error('This order has already been Delivered. Status cannot be modified.');
+      }
+      if (currentStatus === 'cancelled') {
+        throw new Error('This order is cancelled and cannot be updated.');
+      }
+    }
+
+    // Preserve existing status history and append new entry
+    const existingHistory: StatusHistoryItem[] = Array.isArray(current.statusHistory)
+      ? [...current.statusHistory]
+      : [];
+
+    // If existing legacy order had no status history, seed initial placed entry if available
+    if (existingHistory.length === 0 && current.createdAt) {
+      existingHistory.push({
+        status: (currentStatus === 'pending' || currentStatus === 'confirmed' ? currentStatus : 'pending') as OrderStatus,
+        statusName: 'Order Placed',
+        timestamp: current.placedAt || current.createdAt,
+        updatedBy: 'Customer',
+        updaterId: current.customerUid || 'customer',
+        note: 'Order placed by customer',
+      });
+    }
+
+    const newHistoryEntry: StatusHistoryItem = {
+      status: newStatus,
+      statusName,
+      timestamp: nowIso,
+      updatedBy: options.updatedBy || 'Admin',
+      updaterId: options.updaterId || auth.currentUser?.email || auth.currentUser?.uid || 'admin',
+      note: options.note || undefined,
+    };
+
+    const updatePayload: Record<string, any> = {
+      status: newStatus,
+      updatedAt: nowIso,
+      statusHistory: [...existingHistory, newHistoryEntry],
+    };
+
+    if (options.paymentStatus) {
+      updatePayload.paymentStatus = options.paymentStatus;
+    }
+
+    if (newStatus === 'packed') {
+      updatePayload.deliveryStatus = 'Packed';
+      if (!current.packedAt) updatePayload.packedAt = nowIso;
+    } else if (newStatus === 'out_for_delivery') {
+      updatePayload.deliveryStatus = 'Out for Delivery';
+      if (!current.outForDeliveryAt) updatePayload.outForDeliveryAt = nowIso;
+      if (!current.startedDeliveryAt) updatePayload.startedDeliveryAt = nowIso;
+    } else if (newStatus === 'delivered') {
+      updatePayload.deliveryStatus = 'Delivered';
+      if (!current.deliveredAt) updatePayload.deliveredAt = nowIso;
+      updatePayload.deliveredBy = options.updatedBy || 'One Bite Delivery';
+      if (!current.paymentStatus || current.paymentStatus === 'unpaid') {
+        updatePayload.paymentStatus = 'paid';
+      }
+    }
+
+    transaction.update(orderRef, updatePayload);
+  });
 }
 
 export async function signOutUser(): Promise<void> {

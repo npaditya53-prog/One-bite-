@@ -4,6 +4,13 @@ import { api } from '../../services/api.ts';
 import { doc, onSnapshot, db } from '../../services/firebase.ts';
 import { useToast } from '../common/Toast.tsx';
 import {
+  formatTimelineTime,
+  formatTimelineDateTime,
+  getOrderTimelineTimestamps,
+  getStatusRank,
+  getStatusDisplayName,
+} from '../../utils/orderTimeline.ts';
+import {
   X,
   CheckCircle2,
   Clock,
@@ -97,58 +104,19 @@ export function OrderTrackingModal({
   const isDelivery = order.orderType === 'delivery' || (!isTakeaway && !isDineIn);
   const isCancelled = order.status === 'cancelled';
 
-  // Helper to extract recorded timestamp from order fields or statusHistory
-  const getStageTimestamp = (statusKey: string): string | undefined => {
-    if (statusKey === 'ordered') return order.createdAt;
-    if (statusKey === 'packed') return order.packedAt;
-    if (statusKey === 'out_for_delivery') return order.startedDeliveryAt;
-    if (statusKey === 'delivered') return order.deliveredAt;
-
-    if (order.statusHistory && Array.isArray(order.statusHistory)) {
-      const item = [...order.statusHistory].reverse().find((h) => h.status === statusKey);
-      if (item) return item.timestamp;
-    }
-    return undefined;
-  };
-
-  const formatTimestamp = (ts?: string) => {
-    if (!ts) return null;
-    try {
-      return new Date(ts).toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-    } catch {
-      return null;
-    }
-  };
-
-  // Determine stage states: 1: Ordered, 2: Packed, 3: Out for Delivery / Ready, 4: Delivered / Completed
   const currentStatus = order.status;
-
-  // Numerical rank for stages:
-  // 1: pending
-  // 2: confirmed, preparing
-  // 3: packed
-  // 4: out_for_delivery
-  // 5: delivered, completed
-  let rank = 1;
-  if (currentStatus === 'pending') rank = 1;
-  else if (currentStatus === 'confirmed' || currentStatus === 'preparing') rank = 2;
-  else if (currentStatus === 'packed') rank = 3;
-  else if (currentStatus === 'out_for_delivery') rank = 4;
-  else if (currentStatus === 'delivered' || currentStatus === 'completed') rank = 5;
+  const rank = getStatusRank(currentStatus);
+  const stageTimestamps = getOrderTimelineTimestamps(order);
 
   const stages = [
     {
-      id: 'ordered',
+      id: 'placed',
       step: 1,
       label: 'Order Placed',
       description: 'Your order has been received and confirmed by One Bite kitchen.',
       icon: CheckCircle2,
-      timestamp: getStageTimestamp('ordered'),
-      isCompleted: rank >= 2,
+      timestamp: formatTimelineTime(stageTimestamps.placedAt),
+      isCompleted: rank > 1,
       isCurrent: rank === 1,
     },
     {
@@ -157,9 +125,9 @@ export function OrderTrackingModal({
       label: 'Order Packed',
       description: 'Prepared fresh and sealed hygienically in food-grade packaging.',
       icon: PackageCheck,
-      timestamp: getStageTimestamp('packed'),
-      isCompleted: rank >= 4,
-      isCurrent: rank === 3 || (rank === 2 && currentStatus === 'preparing'),
+      timestamp: rank >= 2 ? formatTimelineTime(stageTimestamps.packedAt) : undefined,
+      isCompleted: rank > 2,
+      isCurrent: rank === 2,
       extraStatusText: currentStatus === 'preparing' ? 'Kitchen is preparing your food...' : undefined,
     },
     {
@@ -172,9 +140,9 @@ export function OrderTrackingModal({
         ? 'Your food is being served hot to your table.'
         : 'Our delivery partner is on the way to your delivery address.',
       icon: isTakeaway ? ShoppingBag : isDineIn ? Utensils : Truck,
-      timestamp: getStageTimestamp('out_for_delivery'),
-      isCompleted: rank >= 5,
-      isCurrent: rank === 4,
+      timestamp: rank >= 3 ? formatTimelineTime(stageTimestamps.outForDeliveryAt) : undefined,
+      isCompleted: rank > 3,
+      isCurrent: rank === 3,
     },
     {
       id: 'delivered',
@@ -186,8 +154,8 @@ export function OrderTrackingModal({
         ? 'Enjoy your delicious meal at One Bite Motihari!'
         : 'Order delivered successfully to your doorstep. Enjoy your meal!',
       icon: CheckCircle2,
-      timestamp: getStageTimestamp('delivered'),
-      isCompleted: rank >= 5,
+      timestamp: rank >= 4 ? formatTimelineTime(stageTimestamps.deliveredAt) : undefined,
+      isCompleted: rank >= 4,
       isCurrent: false,
     },
   ];
@@ -215,8 +183,7 @@ export function OrderTrackingModal({
               </span>
             </div>
             <p className="text-[11px] text-stone-400 mt-0.5">
-              Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })},{' '}
-              {formatTimestamp(order.createdAt)}
+              Placed: {formatTimelineDateTime(order.placedAt || order.createdAt) || 'Recent'}
             </p>
           </div>
 
@@ -269,7 +236,7 @@ export function OrderTrackingModal({
               <div className="space-y-6 relative before:absolute before:left-4 before:top-4 before:bottom-4 before:w-0.5 before:bg-stone-200">
                 {stages.map((stage) => {
                   const Icon = stage.icon;
-                  const timeFormatted = formatTimestamp(stage.timestamp);
+                  const timeFormatted = stage.timestamp;
 
                   let circleClasses = 'bg-stone-200 text-stone-400 border-stone-300';
                   let textClasses = 'text-stone-400';
