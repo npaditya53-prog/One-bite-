@@ -31,6 +31,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+import { isRestaurantOpen } from '../utils/operatingHours.ts';
 
 // Initialize Firebase safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -311,9 +312,14 @@ export function sanitizeOrderForFirestore(order: Record<string, any>): Record<st
 }
 
 /**
- * Persist an order to Firebase Firestore
+ * Persist an order to Firebase Firestore (operating hours strictly validated)
  */
-export async function saveOrderToFirestore(order: any): Promise<void> {
+export async function saveOrderToFirestore(order: any, bypassHoursCheck = false): Promise<void> {
+  if (!bypassHoursCheck && !isRestaurantOpen()) {
+    throw new Error(
+      'Restaurant Currently Closed: One Bite accepts orders only during operating hours (11:00 AM to 8:45 PM IST).'
+    );
+  }
   const cleanOrder = sanitizeOrderForFirestore(order);
   const orderRef = doc(db, 'orders', String(order.id));
   await setDoc(orderRef, cleanOrder);

@@ -37,11 +37,19 @@ import {
   calculateCartDiscount,
   CartDiscountResult,
 } from '../utils/offerUtils.ts';
+import {
+  isRestaurantOpen,
+  getLiveOperatingStatus,
+  RESTAURANT_CLOSED_MESSAGE,
+} from '../utils/operatingHours.ts';
 
-interface OpenStatus {
+export interface OpenStatus {
   isOpen: boolean;
   statusText: string;
+  shortBadgeText: string;
   todayScheduleText: string;
+  currentIstTime?: string;
+  reopenMessage?: string;
 }
 
 interface RestaurantContextType {
@@ -58,6 +66,8 @@ interface RestaurantContextType {
   isAdmin: boolean;
   adminUser: { email?: string; phone?: string; identifier?: string; role: string } | null;
   openStatus: OpenStatus;
+  isClosedModalOpen: boolean;
+  setIsClosedModalOpen: (open: boolean) => void;
 
   // Computed collections
   popularItems: MenuItem[];
@@ -289,8 +299,19 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     }
   });
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isClosedModalOpen, setIsClosedModalOpen] = useState(false);
   const [selectedVariantItem, setSelectedVariantItem] = useState<MenuItem | null>(null);
   const [appliedOffer, setAppliedOffer] = useState<OfferItem | null>(null);
+  const isPlacingOrderRef = useRef(false);
+
+  // Auto-updating IST clock ticker (every 5 seconds) to ensure status changes without page refresh
+  const [currentIstTick, setCurrentIstTick] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentIstTick(new Date());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -405,66 +426,19 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     };
   }, [isAdmin]);
 
-  // Compute live open status for IST (India Standard Time)
+  // Compute live open status for Indian Standard Time (11:00 AM to 8:45 PM IST)
+  // Automatically synchronized with real-time clock ticker
   const openStatus = useMemo((): OpenStatus => {
-    try {
-      const now = new Date();
-      const dayFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        weekday: 'long',
-      });
-      const hourFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: false,
-      });
-
-      const currentDay = dayFormatter.format(now) as BusinessDayHours['day'];
-      const timeParts = hourFormatter.format(now).split(':');
-      const currentMinutes = parseInt(timeParts[0], 10) * 60 + parseInt(timeParts[1], 10);
-
-      const dayConfig = data.businessHours.find(h => h.day.toLowerCase() === currentDay.toLowerCase());
-
-      if (!dayConfig || dayConfig.closed) {
-        return {
-          isOpen: false,
-          statusText: 'Closed Today',
-          todayScheduleText: 'Closed today',
-        };
-      }
-
-      const [openH, openM] = dayConfig.openTime.split(':').map(Number);
-      const [closeH, closeM] = dayConfig.closeTime.split(':').map(Number);
-      const openMinutes = openH * 60 + (openM || 0);
-      const closeMinutes = closeH * 60 + (closeM || 0);
-
-      const scheduleFormatted = `${format12Hour(dayConfig.openTime)} – ${format12Hour(dayConfig.closeTime)}`;
-
-      if (currentMinutes >= openMinutes && currentMinutes < closeMinutes) {
-        return {
-          isOpen: true,
-          statusText: `Open Now · Closes at ${format12Hour(dayConfig.closeTime)}`,
-          todayScheduleText: scheduleFormatted,
-        };
-      } else {
-        const isBeforeOpening = currentMinutes < openMinutes;
-        return {
-          isOpen: false,
-          statusText: isBeforeOpening
-            ? `Opens Today at ${format12Hour(dayConfig.openTime)}`
-            : 'Closed for the Night',
-          todayScheduleText: scheduleFormatted,
-        };
-      }
-    } catch {
-      return {
-        isOpen: true,
-        statusText: 'Open Daily',
-        todayScheduleText: '11:00 AM – 10:00 PM',
-      };
-    }
-  }, [data.businessHours]);
+    const live = getLiveOperatingStatus(currentIstTick);
+    return {
+      isOpen: live.isOpen,
+      statusText: live.statusText,
+      shortBadgeText: live.shortBadgeText,
+      todayScheduleText: live.todayScheduleText,
+      currentIstTime: live.currentIstTime,
+      reopenMessage: live.reopenMessage,
+    };
+  }, [currentIstTick]);
 
   const popularItems = useMemo(() => {
     return data.menuItems.filter(item => item.popular && item.available);
@@ -615,14 +589,26 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       tableNumber?: string;
       notes?: string;
     }) => {
-      if (cart.length === 0) {
-        throw new Error('Your cart is empty');
+      if (isPlacingOrderRef.current) {
+        throw new Error('Your order is already being processed. Please wait a moment.');
       }
+      isPlacingOrderRef.current = true;
 
-      const addonsTotal = cart.reduce((sum, item) => {
-        const itemAddons = (item.addons || []).reduce((aSum, a) => aSum + a.price, 0);
-        return sum + itemAddons * item.quantity;
-      }, 0);
+      try {
+        if (cart.length === 0) {
+          throw new Error('Your cart is empty');
+        }
+
+        // Operating Hours Validation: 11:00 AM to 8:45 PM IST
+        if (!isRestaurantOpen()) {
+          setIsClosedModalOpen(true);
+          throw new Error(RESTAURANT_CLOSED_MESSAGE);
+        }
+
+        const addonsTotal = cart.reduce((sum, item) => {
+          const itemAddons = (item.addons || []).reduce((aSum, a) => aSum + a.price, 0);
+          return sum + itemAddons * item.quantity;
+        }, 0);
 
       const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
       const discountAmount = cartDiscount.discountTotal;
@@ -688,6 +674,14 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         createdOrder = await api.createOrder(orderPayload);
         apiSaved = true;
       } catch (err: any) {
+        if (
+          err?.code === 'RESTAURANT_CLOSED' ||
+          err?.message?.includes('closed') ||
+          err?.message?.includes('operating hours')
+        ) {
+          setIsClosedModalOpen(true);
+          throw new Error(err.message || RESTAURANT_CLOSED_MESSAGE);
+        }
         console.warn('Backend order store note:', err?.message);
       }
 
@@ -705,7 +699,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       // Automatically save complete order details to Firebase Firestore
       let firestoreSaved = false;
       try {
-        await saveOrderToFirestore(createdOrder);
+        await saveOrderToFirestore(createdOrder, isAdmin);
         firestoreSaved = true;
       } catch (fsErr: any) {
         console.warn('Firestore order write note:', fsErr?.message);
@@ -777,9 +771,12 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         whatsappUrl,
         order: createdOrder,
       };
-    },
-    [cart, data.settings.whatsapp, data.settings.deliveryCharge, data.settings.freeDeliveryThreshold, cartDiscount, appliedOffer]
-  );
+    } finally {
+      isPlacingOrderRef.current = false;
+    }
+  },
+  [cart, data.settings.whatsapp, data.settings.deliveryCharge, data.settings.freeDeliveryThreshold, cartDiscount, appliedOffer, isAdmin]
+);
 
   // Admin Actions
   const handleLogin = async (email: string, pass: string) => {
@@ -1145,6 +1142,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         loadCustomerOrders,
         authInitialized,
         openStatus,
+        isClosedModalOpen,
+        setIsClosedModalOpen,
         popularItems,
         activeOffers,
         cart,

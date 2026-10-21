@@ -123,14 +123,23 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
 
           {/* Desktop Right CTA Bar */}
           <div className="hidden lg:flex items-center gap-3">
-            {/* Status dot */}
-            <div className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-stone-900 border border-stone-800 text-stone-300">
+            {/* Status dot & live operating hours indicator */}
+            <div
+              className={`flex items-center gap-2 text-xs px-3.5 py-1.5 rounded-full border transition-colors ${
+                openStatus.isOpen
+                  ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                  : 'bg-rose-950/60 border-rose-800 text-rose-300'
+              }`}
+              title={`Restaurant Timing: 11:00 AM to 8:45 PM IST (${openStatus.isOpen ? 'Accepting Orders' : 'Closed for Orders'})`}
+            >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-stone-500'
+                  openStatus.isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
                 }`}
               />
-              <span>{openStatus.isOpen ? 'Open Now' : 'Closed'}</span>
+              <span className="font-extrabold text-[11px] tracking-wide">
+                {openStatus.isOpen ? 'OPEN NOW — Accepting Orders' : 'CLOSED — Orders Unavailable'}
+              </span>
             </div>
 
             {settings.phone && (
@@ -369,11 +378,13 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
           <div className="pt-4 border-t border-stone-800/80 flex flex-col gap-3 text-xs text-stone-400">
             <div className="flex items-center gap-2">
               <span
-                className={`w-2 h-2 rounded-full ${
-                  openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-stone-500'
+                className={`w-2.5 h-2.5 rounded-full ${
+                  openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
                 }`}
               />
-              <span className="font-medium text-stone-200">{openStatus.statusText}</span>
+              <span className={`font-bold text-xs ${openStatus.isOpen ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {openStatus.statusText}
+              </span>
             </div>
 
             <div className="flex flex-col gap-2 pt-1 border-t border-stone-900">

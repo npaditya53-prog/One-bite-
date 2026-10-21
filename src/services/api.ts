@@ -443,7 +443,9 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to place order' }));
-      throw new Error(err.error || 'Failed to place order');
+      const errorObj: any = new Error(err.error || 'Failed to place order');
+      if (err.code) errorObj.code = err.code;
+      throw errorObj;
     }
     return await res.json();
   },

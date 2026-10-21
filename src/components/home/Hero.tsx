@@ -46,13 +46,17 @@ export function Hero({ onNavigateToMenu }: HeroProps) {
           {/* Left Column: Branch Title & CTA */}
           <div className="lg:col-span-7 max-w-2xl">
             {/* Status Indicator & Location kicker */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-stone-900/90 border border-stone-800 text-xs mb-6 shadow-xs">
+            <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border text-xs mb-6 shadow-xs ${
+              openStatus.isOpen ? 'bg-stone-900/90 border-stone-800' : 'bg-rose-950/40 border-rose-900/60'
+            }`}>
               <span
                 className={`w-2 h-2 rounded-full ${
-                  openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                  openStatus.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
                 }`}
               />
-              <span className="font-semibold text-stone-200">{openStatus.statusText}</span>
+              <span className={`font-bold ${openStatus.isOpen ? 'text-stone-200' : 'text-rose-300'}`}>
+                {openStatus.statusText}
+              </span>
               <span className="text-stone-600">·</span>
               <span className="text-stone-400 flex items-center gap-1 font-medium">
                 <MapPin className="w-3 h-3 text-amber-500" /> Motihari Branch

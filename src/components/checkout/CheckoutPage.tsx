@@ -20,7 +20,9 @@ import {
   Plus,
   Minus,
   Trash2,
+  Clock,
 } from 'lucide-react';
+import { isRestaurantOpen, RESTAURANT_CLOSED_MESSAGE } from '../../utils/operatingHours.ts';
 
 interface CheckoutPageProps {
   onNavigate: (view: string) => void;
@@ -39,6 +41,8 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     settings,
     firebaseUser,
     loginWithGoogle,
+    openStatus,
+    setIsClosedModalOpen,
   } = useRestaurant();
   const { showToast } = useToast();
 
@@ -151,6 +155,12 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Strict Operating Hours Enforcement
+    if (!isRestaurantOpen()) {
+      setIsClosedModalOpen(true);
+      return;
+    }
 
     if (cart.length === 0) {
       showToast('Your cart is empty', 'error');
@@ -743,16 +753,44 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                 Review your order and delivery details before continuing to WhatsApp.
               </div>
 
+              {/* Operating Hours Closed Notice if outside 11:00 AM - 8:45 PM IST */}
+              {!openStatus.isOpen && (
+                <div
+                  onClick={() => setIsClosedModalOpen(true)}
+                  className="p-4 bg-rose-50 border border-rose-300 rounded-2xl flex items-start gap-3 cursor-pointer hover:bg-rose-100 transition-colors"
+                >
+                  <Clock className="w-5 h-5 text-rose-600 shrink-0 mt-0.5 animate-pulse" />
+                  <div className="text-left space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black px-2 py-0.5 rounded-full bg-rose-600 text-white uppercase tracking-wide">
+                        Closed
+                      </span>
+                      <span className="text-xs font-bold text-rose-900">CLOSED — Orders Unavailable</span>
+                    </div>
+                    <p className="text-xs text-rose-800 leading-relaxed font-medium">
+                      We’re sorry! One Bite is currently closed and cannot accept your order right now. Operating hours are 11:00 AM to 8:45 PM IST.
+                    </p>
+                    <span className="text-[11px] text-rose-600 underline font-semibold block pt-0.5">
+                      Click to view operating hours & details
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* PLACE DELIVERY ORDER BUTTON */}
               <div className="space-y-2">
                 <button
                   type="submit"
-                  disabled={isSubmitting || !isChecklistComplete}
+                  disabled={isSubmitting || !isChecklistComplete || !openStatus.isOpen}
                   className="w-full py-4 px-6 rounded-2xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 disabled:bg-stone-300 disabled:text-stone-500 disabled:cursor-not-allowed text-white font-extrabold text-base shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <MessageSquare className="w-5 h-5" />
                   <span>
-                    {isSubmitting ? 'Preparing WhatsApp Order...' : 'PLACE DELIVERY ORDER'}
+                    {isSubmitting
+                      ? 'Preparing WhatsApp Order...'
+                      : !openStatus.isOpen
+                      ? 'CLOSED — Orders Unavailable'
+                      : 'PLACE DELIVERY ORDER'}
                   </span>
                 </button>
                 <p className="text-xs text-center text-stone-600 font-semibold">

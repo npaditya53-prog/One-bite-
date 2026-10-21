@@ -118,9 +118,23 @@ service cloud.firestore {
              data.createdAt is string && data.createdAt.size() <= 100;
     }
 
+    // Operating Hours Validation: 11:00 AM to 8:45 PM IST (Asia/Kolkata)
+    // IST is UTC + 5 hours 30 mins (+330 minutes)
+    // 11:00 AM IST = 05:30 UTC = 5 * 60 + 30 = 330 minutes from midnight UTC
+    // 8:45 PM IST (20:45 IST) = 15:15 UTC = 15 * 60 + 15 = 915 minutes from midnight UTC
+    // request.time.hours() and request.time.minutes() are always evaluated in UTC
+    function isOperatingHours() {
+      return (request.time.hours() * 60 + request.time.minutes() >= 330) &&
+             (request.time.hours() * 60 + request.time.minutes() < 915);
+    }
+
     match /orders/{orderId} {
       allow read: if isAdmin() || isDeliveryBoy() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
-      allow create: if isValidId(orderId) && isValidOrder(incoming()) && (incoming().status == 'pending' || (isAdmin() && incoming().status == 'confirmed')) && (!('customerUid' in incoming()) || !isSignedIn() || incoming().customerUid == request.auth.uid);
+      allow create: if isValidId(orderId) &&
+                       isValidOrder(incoming()) &&
+                       (isAdmin() || isOperatingHours()) &&
+                       (incoming().status == 'pending' || (isAdmin() && incoming().status == 'confirmed')) &&
+                       (!('customerUid' in incoming()) || !isSignedIn() || incoming().customerUid == request.auth.uid);
       allow update: if (isAdmin() && isValidId(orderId) && isValidOrder(incoming()) && incoming().createdAt == existing().createdAt) ||
                      (isDeliveryBoy() && isValidId(orderId) && isValidOrder(incoming()) &&
                       existing().status != 'cancelled' &&

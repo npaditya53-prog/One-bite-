@@ -44,6 +44,7 @@ const MyOrdersPage = React.lazy(() =>
 );
 import { OrderTrackingModal } from './components/orders/OrderTrackingModal.tsx';
 import { CustomerOnboardingModal } from './components/auth/CustomerOnboardingModal.tsx';
+import { RestaurantClosedModal } from './components/common/RestaurantClosedModal.tsx';
 import { CustomerOrder } from './types/index.ts';
 
 function pathToView(pathname: string): string {
@@ -88,6 +89,8 @@ function MainContent() {
     celebrationWhatsappUrl,
     dismissOrderCelebration,
     setIsCartOpen,
+    isClosedModalOpen,
+    setIsClosedModalOpen,
   } = useRestaurant();
   const [currentView, setCurrentView] = useState<string>(() => {
     return pathToView(window.location.pathname);
@@ -475,6 +478,12 @@ function MainContent() {
             navigateTo('my-orders');
           }
         }}
+      />
+
+      {/* Restaurant Operating Hours Closed Modal */}
+      <RestaurantClosedModal
+        isOpen={isClosedModalOpen}
+        onClose={() => setIsClosedModalOpen(false)}
       />
     </div>
   );

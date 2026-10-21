@@ -1346,12 +1346,69 @@ setInterval(() => {
   }
 }, 30000);
 
+// Restaurant Operating Hours Validation: 11:00 AM to 8:45 PM IST (Asia/Kolkata)
+function isRestaurantOpenIST(now = new Date()): boolean {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false,
+    });
+    const parts = formatter.format(now).split(':');
+    const hours = parseInt(parts[0], 10) % 24;
+    const minutes = parseInt(parts[1], 10);
+    const totalMinutes = hours * 60 + minutes;
+
+    // 11:00 AM IST (660 mins) to 8:44:59 PM IST (1244 mins)
+    // At exactly 8:45 PM (1245 mins) and after -> Closed
+    return totalMinutes >= 660 && totalMinutes < 1245;
+  } catch {
+    // Precise mathematical fallback: IST = UTC + 5 hours 30 mins
+    const utcHours = now.getUTCHours();
+    const utcMinutes = now.getUTCMinutes();
+    const totalMinutes = ((utcHours * 60 + utcMinutes) + 330) % 1440;
+    return totalMinutes >= 660 && totalMinutes < 1245;
+  }
+}
+
+// Public live status endpoint for synchronization
+app.get('/api/restaurant-status', (_req, res) => {
+  const isOpen = isRestaurantOpenIST();
+  res.json({
+    isOpen,
+    statusText: isOpen ? 'OPEN NOW — Accepting Orders' : 'CLOSED — Orders Unavailable',
+    operatingHours: '11:00 AM to 8:45 PM IST',
+    timezone: 'Asia/Kolkata',
+  });
+});
+
 app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
   if (req.headers['x-load-test'] === 'dry-run' || req.body?.isDryRun) {
     return next();
   }
   return orderRateLimiter(req, res, next);
 }, (req, res) => {
+  // Check if caller is authenticated admin (e.g. recording manual/phone order)
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const session = token ? activeSessions.get(token) : null;
+  const isAdminSession = session?.role === 'admin';
+
+  // Strict Operating Hours Enforcement (11:00 AM to 8:45 PM IST)
+  if (!isAdminSession && !isRestaurantOpenIST()) {
+    return res.status(403).json({
+      error: "Restaurant Currently Closed: One Bite is currently closed and cannot accept your order right now. Our operating hours are 11:00 AM to 8:45 PM IST. Please visit us again during our opening hours.",
+      code: 'RESTAURANT_CLOSED',
+      operatingHours: {
+        open: '11:00 AM IST',
+        close: '8:45 PM IST',
+        timezone: 'Asia/Kolkata',
+      },
+    });
+  }
+
   const {
     customerName,
     customerPhone,
