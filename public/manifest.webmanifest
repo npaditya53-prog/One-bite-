@@ -1,24 +1,34 @@
 
 {
   "id": "/",
-  "name": "ONE BITE - Motihari",
+  "name": "One Bite Motihari",
   "short_name": "ONE BITE",
-  "description": "ONE BITE Family Restaurant, Motihari",
+  "description": "Official app for One Bite Motihari. Handcrafted burgers, fresh dough pizzas, wraps, shakes & direct home delivery.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#080808",
-  "theme_color": "#111111",
+  "theme_color": "#080808",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/official-onebite-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
+

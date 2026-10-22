@@ -208,7 +208,7 @@ function MainContent() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center text-white p-4">
+      <div className="min-h-screen bg-[#080808] flex flex-col items-center justify-center text-white p-4">
         <div className="mb-4 animate-pulse">
           <OneBiteLogo size="xl" showLocation />
         </div>
