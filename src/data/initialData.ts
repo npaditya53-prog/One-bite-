@@ -1991,13 +1991,13 @@ export const initialData: DatabaseSchema = {
 
   // Business Hours
   businessHours: [
-    { id: 'bh_mon', day: 'Monday', openTime: '11:00', closeTime: '20:45', closed: false },
-    { id: 'bh_tue', day: 'Tuesday', openTime: '11:00', closeTime: '20:45', closed: false },
-    { id: 'bh_wed', day: 'Wednesday', openTime: '11:00', closeTime: '20:45', closed: false },
-    { id: 'bh_thu', day: 'Thursday', openTime: '11:00', closeTime: '20:45', closed: false },
-    { id: 'bh_fri', day: 'Friday', openTime: '11:00', closeTime: '20:45', closed: false },
-    { id: 'bh_sat', day: 'Saturday', openTime: '11:00', closeTime: '20:45', closed: false },
-    { id: 'bh_sun', day: 'Sunday', openTime: '11:00', closeTime: '20:45', closed: false },
+    { id: 'bh_mon', day: 'Monday', openTime: '11:00', closeTime: '22:00', closed: false },
+    { id: 'bh_tue', day: 'Tuesday', openTime: '11:00', closeTime: '22:00', closed: false },
+    { id: 'bh_wed', day: 'Wednesday', openTime: '11:00', closeTime: '22:00', closed: false },
+    { id: 'bh_thu', day: 'Thursday', openTime: '11:00', closeTime: '22:00', closed: false },
+    { id: 'bh_fri', day: 'Friday', openTime: '11:00', closeTime: '22:00', closed: false },
+    { id: 'bh_sat', day: 'Saturday', openTime: '11:00', closeTime: '22:30', closed: false },
+    { id: 'bh_sun', day: 'Sunday', openTime: '11:00', closeTime: '22:30', closed: false },
   ],
 
   // Initial orders list
