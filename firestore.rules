@@ -26,20 +26,24 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'kumaraditye9@gmail.com' ||
-        request.auth.token.email == 'npaditya53@gmail.com' ||
-        request.auth.token.email == 'admin@onebitemotihari.in' ||
+        ('email' in request.auth.token && (
+          request.auth.token.email == 'kumaraditye9@gmail.com' ||
+          request.auth.token.email == 'npaditya53@gmail.com' ||
+          request.auth.token.email == 'admin@onebitemotihari.in'
+        )) ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
 
     function isDeliveryBoy() {
       return isSignedIn() && (
-        request.auth.token.email == 'delivery@onebitemotihari.in' ||
-        request.auth.token.email == 'deliveryboy@onebitemotihari.in' ||
-        request.auth.token.email == 'yoonekaditya.ai@gmail.com' ||
+        ('email' in request.auth.token && (
+          request.auth.token.email == 'delivery@onebitemotihari.in' ||
+          request.auth.token.email == 'deliveryboy@onebitemotihari.in' ||
+          request.auth.token.email == 'yoonekaditya.ai@gmail.com'
+        )) ||
         exists(/databases/$(database)/documents/delivery_boys/$(request.auth.uid)) ||
-        exists(/databases/$(database)/documents/delivery_boys/$(request.auth.token.email))
+        ('email' in request.auth.token && exists(/databases/$(database)/documents/delivery_boys/$(request.auth.token.email)))
       );
     }
 

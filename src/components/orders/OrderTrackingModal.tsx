@@ -123,7 +123,7 @@ export function OrderTrackingModal({
       id: 'packed',
       step: 2,
       label: 'Order Packed',
-      description: 'Prepared fresh and sealed hygienically in food-grade packaging.',
+      description: 'Your order has been prepared fresh and sealed hygienically in food-grade packaging.',
       icon: PackageCheck,
       timestamp: rank >= 2 ? formatTimelineTime(stageTimestamps.packedAt) : undefined,
       isCompleted: rank > 2,
@@ -138,7 +138,7 @@ export function OrderTrackingModal({
         ? 'Your order is ready at the restaurant counter for pickup.'
         : isDineIn
         ? 'Your food is being served hot to your table.'
-        : 'Our delivery partner is on the way to your delivery address.',
+        : 'Your delivery partner is on the way to your delivery address.',
       icon: isTakeaway ? ShoppingBag : isDineIn ? Utensils : Truck,
       timestamp: rank >= 3 ? formatTimelineTime(stageTimestamps.outForDeliveryAt) : undefined,
       isCompleted: rank > 3,
@@ -152,11 +152,11 @@ export function OrderTrackingModal({
         ? 'Order collected successfully. Thank you for dining with One Bite!'
         : isDineIn
         ? 'Enjoy your delicious meal at One Bite Motihari!'
-        : 'Order delivered successfully to your doorstep. Enjoy your meal!',
+        : 'Your order has been delivered successfully to your doorstep. Enjoy your meal!',
       icon: CheckCircle2,
       timestamp: rank >= 4 ? formatTimelineTime(stageTimestamps.deliveredAt) : undefined,
       isCompleted: rank >= 4,
-      isCurrent: false,
+      isCurrent: rank === 4,
     },
   ];
 

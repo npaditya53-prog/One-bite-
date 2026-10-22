@@ -170,7 +170,7 @@ const CART_STORAGE_KEY = 'onebite_cart_items';
 
 export function RestaurantProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<DatabaseSchema>(initialData);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminUser, setAdminUser] = useState<{ email?: string; phone?: string; identifier?: string; role: string } | null>(null);
@@ -325,18 +325,16 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
 
   const loadData = useCallback(async () => {
     try {
-      setIsLoading(true);
       setError(null);
       const res = await api.getData();
-      setData(res);
-      if (res.orders) {
-        setOrders(res.orders);
+      if (res && res.settings && res.menuItems) {
+        setData(res);
+        if (res.orders) {
+          setOrders(res.orders);
+        }
       }
     } catch (err: any) {
-      console.error('Failed to load restaurant data:', err);
-      setError(err?.message || 'Failed to load restaurant data');
-    } finally {
-      setIsLoading(false);
+      console.warn('Background data fetch notice (using cached/fallback menu data):', err?.message);
     }
   }, []);
 
@@ -1058,20 +1056,24 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     paymentStatus?: 'unpaid' | 'paid',
     note?: string
   ) => {
-    // 1. Authoritative Firestore transactional update
-    await updateOrderStatusInFirestore(id, status, {
-      note,
-      paymentStatus,
-      updatedBy: adminUser?.identifier || auth.currentUser?.email || 'Admin',
-      updaterId: auth.currentUser?.email || adminUser?.identifier || 'admin',
-    });
-
-    // 2. Synchronize to server API
+    // 1. Authoritative Backend Server update (verifies admin session token)
     let updated: CustomerOrder | null = null;
     try {
       updated = await api.updateOrderStatus(id, status, paymentStatus, note);
-    } catch (e) {
-      console.warn('Backend server status update sync note:', e);
+    } catch (e: any) {
+      console.warn('Backend server status update note:', e?.message);
+    }
+
+    // 2. Real-time Firestore transactional update
+    try {
+      await updateOrderStatusInFirestore(id, status, {
+        note,
+        paymentStatus,
+        updatedBy: adminUser?.identifier || auth.currentUser?.email || 'Admin',
+        updaterId: auth.currentUser?.email || adminUser?.identifier || 'admin',
+      });
+    } catch (fsErr: any) {
+      console.warn('Firestore status update sync note:', fsErr?.message);
     }
 
     // 3. Immediately reflect in local React context

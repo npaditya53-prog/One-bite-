@@ -410,6 +410,35 @@ export async function fetchCustomerOrdersFromFirestore(customerUid: string): Pro
 }
 
 /**
+ * Recursively find any fields with 'undefined' value in an object or array for diagnostic reporting.
+ */
+export function findUndefinedFields(obj: any, path: string = ''): string[] {
+  const undefinedPaths: string[] = [];
+  if (obj === undefined) {
+    undefinedPaths.push(path || 'root');
+    return undefinedPaths;
+  }
+  if (obj === null || typeof obj !== 'object') {
+    return undefinedPaths;
+  }
+  if (Array.isArray(obj)) {
+    obj.forEach((item, index) => {
+      undefinedPaths.push(...findUndefinedFields(item, `${path}[${index}]`));
+    });
+  } else {
+    for (const key of Object.keys(obj)) {
+      const currentPath = path ? `${path}.${key}` : key;
+      if (obj[key] === undefined) {
+        undefinedPaths.push(currentPath);
+      } else {
+        undefinedPaths.push(...findUndefinedFields(obj[key], currentPath));
+      }
+    }
+  }
+  return undefinedPaths;
+}
+
+/**
  * Update order status and statusHistory atomically in Firebase Firestore using a transaction
  */
 export async function updateOrderStatusInFirestore(
@@ -473,9 +502,12 @@ export async function updateOrderStatusInFirestore(
     }
 
     // Preserve existing status history and append new entry
-    const existingHistory: StatusHistoryItem[] = Array.isArray(current.statusHistory)
-      ? [...current.statusHistory]
+    const rawExistingHistory = Array.isArray(current.statusHistory)
+      ? current.statusHistory
       : [];
+    const existingHistory: StatusHistoryItem[] = rawExistingHistory.map((item: any) =>
+      sanitizeOrderForFirestore(item) as StatusHistoryItem
+    );
 
     // If existing legacy order had no status history, seed initial placed entry if available
     if (existingHistory.length === 0 && current.createdAt) {
@@ -489,42 +521,57 @@ export async function updateOrderStatusInFirestore(
       });
     }
 
-    const newHistoryEntry: StatusHistoryItem = {
+    const newHistoryEntry: Record<string, any> = {
       status: newStatus,
       statusName,
       timestamp: nowIso,
       updatedBy: options.updatedBy || 'Admin',
       updaterId: options.updaterId || auth.currentUser?.email || auth.currentUser?.uid || 'admin',
-      note: options.note || undefined,
     };
 
-    const updatePayload: Record<string, any> = {
+    if (options.note && options.note.trim()) {
+      newHistoryEntry.note = options.note.trim();
+    }
+
+    const rawUpdatePayload: Record<string, any> = {
       status: newStatus,
       updatedAt: nowIso,
       statusHistory: [...existingHistory, newHistoryEntry],
     };
 
     if (options.paymentStatus) {
-      updatePayload.paymentStatus = options.paymentStatus;
+      rawUpdatePayload.paymentStatus = options.paymentStatus;
     }
 
     if (newStatus === 'packed') {
-      updatePayload.deliveryStatus = 'Packed';
-      if (!current.packedAt) updatePayload.packedAt = nowIso;
+      rawUpdatePayload.deliveryStatus = 'Packed';
+      if (!current.packedAt) rawUpdatePayload.packedAt = nowIso;
     } else if (newStatus === 'out_for_delivery') {
-      updatePayload.deliveryStatus = 'Out for Delivery';
-      if (!current.outForDeliveryAt) updatePayload.outForDeliveryAt = nowIso;
-      if (!current.startedDeliveryAt) updatePayload.startedDeliveryAt = nowIso;
+      rawUpdatePayload.deliveryStatus = 'Out for Delivery';
+      if (!current.outForDeliveryAt) rawUpdatePayload.outForDeliveryAt = nowIso;
+      if (!current.startedDeliveryAt) rawUpdatePayload.startedDeliveryAt = nowIso;
     } else if (newStatus === 'delivered') {
-      updatePayload.deliveryStatus = 'Delivered';
-      if (!current.deliveredAt) updatePayload.deliveredAt = nowIso;
-      updatePayload.deliveredBy = options.updatedBy || 'One Bite Delivery';
+      rawUpdatePayload.deliveryStatus = 'Delivered';
+      if (!current.deliveredAt) rawUpdatePayload.deliveredAt = nowIso;
+      rawUpdatePayload.deliveredBy = options.updatedBy || 'One Bite Delivery';
       if (!current.paymentStatus || current.paymentStatus === 'unpaid') {
-        updatePayload.paymentStatus = 'paid';
+        rawUpdatePayload.paymentStatus = 'paid';
       }
     }
 
-    transaction.update(orderRef, updatePayload);
+    // Strictly sanitize update payload to guarantee zero undefined fields
+    const cleanUpdatePayload = sanitizeOrderForFirestore(rawUpdatePayload);
+
+    // Diagnostic assertion: check for any remaining undefined fields
+    const undefinedFields = findUndefinedFields(cleanUpdatePayload);
+    if (undefinedFields.length > 0) {
+      console.error('[Firestore Transaction Error] Payload contains undefined fields:', undefinedFields);
+      throw new Error(
+        `Transaction.update() payload contains unsupported undefined field(s): ${undefinedFields.join(', ')}`
+      );
+    }
+
+    transaction.update(orderRef, cleanUpdatePayload);
   });
 }
 

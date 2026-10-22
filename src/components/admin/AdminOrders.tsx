@@ -150,6 +150,71 @@ export function AdminOrders() {
     });
   };
 
+  // Handle direct click on a 4-step timeline box in the admin order card
+  const handleTimelineStepClick = (
+    order: CustomerOrder,
+    stepNum: number,
+    targetStatus: OrderStatus,
+    stepLabel: string
+  ) => {
+    if (order.status === 'cancelled') {
+      showToast('Cannot change status: This order has been cancelled.', 'error');
+      return;
+    }
+
+    const currentRank = getStatusRank(order.status);
+
+    // 1. If clicking the immediate next allowed step -> open confirmation dialog
+    if (stepNum === currentRank + 1) {
+      const actionLabels: Record<string, string> = {
+        packed: 'Mark as Order Packed',
+        out_for_delivery: 'Mark Out for Delivery',
+        delivered: 'Mark as Delivered',
+      };
+      handleInitiateStatusUpdate(
+        order,
+        targetStatus,
+        actionLabels[targetStatus] || `Mark as ${stepLabel}`
+      );
+      return;
+    }
+
+    // 2. If clicking an already completed step
+    if (stepNum < currentRank || (stepNum === 4 && currentRank >= 4)) {
+      const timeStr = formatTimelineTime(
+        stepNum === 1
+          ? order.placedAt || order.createdAt
+          : stepNum === 2
+          ? order.packedAt
+          : stepNum === 3
+          ? order.outForDeliveryAt
+          : order.deliveredAt
+      );
+      showToast(
+        `Step ${stepNum} (${stepLabel}) was completed ${timeStr ? `at ${timeStr}` : 'previously'}.`,
+        'info'
+      );
+      return;
+    }
+
+    // 3. If clicking the currently active step
+    if (stepNum === currentRank) {
+      showToast(`Order #${order.id} is currently in progress at Step ${stepNum}: ${stepLabel}.`, 'info');
+      return;
+    }
+
+    // 4. If clicking a future step beyond the next step -> enforce sequential order progression
+    const nextStepNames: Record<number, string> = {
+      1: 'Step 2: Order Packed',
+      2: 'Step 3: Out for Delivery',
+      3: 'Step 4: Delivered',
+    };
+    showToast(
+      `Sequential progression required: Please advance to ${nextStepNames[currentRank] || 'next step'} before selecting Step ${stepNum} (${stepLabel}).`,
+      'error'
+    );
+  };
+
   // Execute confirmed status change
   const handleConfirmStatusChange = async () => {
     if (!confirmModal.order || !confirmModal.targetStatus) return;
@@ -544,34 +609,46 @@ export function AdminOrders() {
             const rank = getStatusRank(order.status);
             const isHistoryOpen = expandedHistoryId === order.id;
 
-            // 4 Canonical stages for the live timeline preview
+            // 4 Canonical stages for the interactive live timeline
             const timelineSteps = [
               {
                 id: 'placed',
+                stepNum: 1,
                 label: 'Order Placed',
+                targetStatus: 'confirmed' as OrderStatus,
                 isCompleted: rank > 1,
                 isCurrent: rank === 1,
+                isNext: false,
                 timestamp: stageTimestamps.placedAt,
               },
               {
                 id: 'packed',
+                stepNum: 2,
                 label: 'Order Packed',
+                targetStatus: 'packed' as OrderStatus,
                 isCompleted: rank > 2,
                 isCurrent: rank === 2,
+                isNext: rank === 1,
                 timestamp: stageTimestamps.packedAt,
               },
               {
                 id: 'out_for_delivery',
+                stepNum: 3,
                 label: 'Out for Delivery',
+                targetStatus: 'out_for_delivery' as OrderStatus,
                 isCompleted: rank > 3,
                 isCurrent: rank === 3,
+                isNext: rank === 2,
                 timestamp: stageTimestamps.outForDeliveryAt,
               },
               {
                 id: 'delivered',
+                stepNum: 4,
                 label: 'Delivered',
+                targetStatus: 'delivered' as OrderStatus,
                 isCompleted: rank >= 4,
-                isCurrent: false,
+                isCurrent: rank === 4,
+                isNext: rank === 3,
                 timestamp: stageTimestamps.deliveredAt,
               },
             ];
@@ -614,55 +691,101 @@ export function AdminOrders() {
                   </div>
                 </div>
 
-                {/* 2. LIVE 4-STAGE ORDER STATUS TIMELINE BAR */}
+                {/* 2. LIVE 4-STAGE INTERACTIVE ORDER STATUS TIMELINE BAR */}
                 <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 space-y-2.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-black text-stone-700 uppercase tracking-wider text-[11px]">
-                      Live Order Status Timeline
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
+                    <span className="font-black text-stone-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Live Order Status Timeline</span>
                     </span>
                     <span className="text-[11px] font-medium text-stone-500">
-                      Step {rank} of 4 · {getStatusDisplayName(order.status)}
+                      Step {rank} of 4 · <strong className="text-stone-800">{getStatusDisplayName(order.status)}</strong>
                     </span>
                   </div>
 
-                  {/* Horizontal 4-Step Visual Tracker */}
-                  <div className="grid grid-cols-4 gap-2 pt-1">
-                    {timelineSteps.map((step, idx) => {
+                  {/* Responsive 4-Step Interactive Tracker (2 cols on mobile, 4 on desktop to prevent label truncation) */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 pt-1">
+                    {timelineSteps.map((step) => {
                       const timeStr = formatTimelineTime(step.timestamp);
-                      let borderClass = 'border-stone-200 bg-white text-stone-400';
-                      let dotClass = 'bg-stone-300 text-stone-600';
+                      const isClickable = !isUpdating && !isCancelled;
+
+                      let containerClass = 'border-stone-200 bg-white text-stone-400';
+                      let dotClass = 'bg-stone-200 text-stone-600';
+                      let badge = null;
 
                       if (step.isCompleted) {
-                        borderClass = 'border-emerald-300 bg-emerald-50 text-emerald-950';
+                        containerClass = 'border-emerald-300 bg-emerald-50/70 text-emerald-950 hover:bg-emerald-100/70 hover:border-emerald-400 cursor-pointer shadow-2xs';
                         dotClass = 'bg-emerald-600 text-white';
+                        badge = timeStr ? (
+                          <span className="font-mono font-bold text-emerald-900 bg-emerald-100/80 border border-emerald-300 px-1.5 py-0.5 rounded text-[10px]">
+                            {timeStr}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700 font-semibold text-[10px]">Completed</span>
+                        );
                       } else if (step.isCurrent) {
-                        borderClass = 'border-amber-400 bg-amber-50 text-amber-950 ring-2 ring-amber-200';
+                        containerClass = 'border-amber-400 bg-amber-50 text-amber-950 ring-2 ring-amber-300 cursor-pointer shadow-2xs';
                         dotClass = 'bg-amber-600 text-white animate-pulse';
+                        badge = (
+                          <span className="font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded text-[10px]">
+                            Current
+                          </span>
+                        );
+                      } else if (step.isNext) {
+                        containerClass = 'border-amber-500 bg-white hover:bg-amber-50 text-stone-900 ring-2 ring-amber-400/40 hover:ring-amber-400 cursor-pointer shadow-xs transition-transform transform active:scale-[0.98]';
+                        dotClass = 'bg-amber-600 text-white font-black';
+                        badge = (
+                          <span className="inline-flex items-center gap-0.5 font-black text-amber-700 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded text-[10px]">
+                            <span>Advance</span>
+                            <ArrowRight className="w-2.5 h-2.5" />
+                          </span>
+                        );
+                      } else {
+                        // Future pending step
+                        containerClass = 'border-stone-200 bg-stone-100/60 text-stone-400 hover:bg-stone-100 cursor-pointer';
+                        dotClass = 'bg-stone-200 text-stone-400';
+                        badge = <span className="text-stone-400 italic text-[10px]">Pending</span>;
                       }
 
                       return (
-                        <div
+                        <button
                           key={step.id}
-                          className={`p-2.5 rounded-xl border flex flex-col justify-between transition-all ${borderClass}`}
+                          type="button"
+                          disabled={!isClickable}
+                          onClick={() =>
+                            handleTimelineStepClick(order, step.stepNum, step.targetStatus, step.label)
+                          }
+                          title={
+                            step.isNext
+                              ? `Click to advance to Step ${step.stepNum}: ${step.label}`
+                              : step.isCompleted
+                              ? `Step ${step.stepNum}: ${step.label} (Completed)`
+                              : step.isCurrent
+                              ? `Step ${step.stepNum}: ${step.label} (Current)`
+                              : `Step ${step.stepNum}: ${step.label} (Pending - sequential progression)`
+                          }
+                          className={`p-2.5 rounded-xl border flex flex-col justify-between text-left transition-all relative ${containerClass} disabled:opacity-60 disabled:cursor-not-allowed`}
                         >
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 w-full min-w-0">
                             <span
                               className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${dotClass}`}
                             >
-                              {step.isCompleted ? '✓' : idx + 1}
+                              {step.isCompleted ? '✓' : step.stepNum}
                             </span>
-                            <span className="font-bold text-[11px] truncate">
-                              {step.label}
+                            <span className="font-bold text-[11px] leading-tight truncate">
+                              Step {step.stepNum}: {step.label}
                             </span>
                           </div>
-                          <div className="mt-1 text-[10px] font-mono font-medium pl-6">
-                            {timeStr ? (
-                              <span className="text-stone-700 font-bold">{timeStr}</span>
-                            ) : (
-                              <span className="text-stone-400 italic">Pending</span>
+
+                          <div className="mt-2 flex items-center justify-between w-full">
+                            {badge}
+                            {step.isNext && (
+                              <span className="text-[9px] uppercase tracking-wider font-extrabold text-amber-600">
+                                Click to update
+                              </span>
                             )}
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>

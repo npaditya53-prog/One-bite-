@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { OneBiteLogo } from '../common/OneBiteLogo.tsx';
+import { InstallAppButton } from '../common/InstallAppButton.tsx';
 import {
   Menu,
   X,
@@ -123,6 +124,7 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
 
           {/* Desktop Right CTA Bar */}
           <div className="hidden lg:flex items-center gap-3">
+            <InstallAppButton />
             {/* Status dot & live operating hours indicator */}
             <div
               className={`flex items-center gap-2 text-xs px-3.5 py-1.5 rounded-full border transition-colors ${
@@ -230,6 +232,7 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
 
           {/* Mobile & Tablet Right Controls (< 1024px) */}
           <div className="flex lg:hidden items-center gap-1.5">
+            <InstallAppButton />
             <button
               type="button"
               onClick={() => onNavigate('admin')}
