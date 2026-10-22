@@ -118,7 +118,7 @@ export function Hero({ onNavigateToMenu }: HeroProps) {
             <div className="mt-10 pt-6 border-t border-stone-800/80 flex flex-wrap items-center gap-y-3 gap-x-6 text-xs text-stone-400">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-amber-500" />
-                <span>Daily 11:00 AM to 10:00 PM</span>
+                <span>Daily 11:00 AM to 8:45 PM</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-amber-500" />

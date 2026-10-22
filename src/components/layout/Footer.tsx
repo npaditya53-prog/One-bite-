@@ -152,8 +152,7 @@ export function Footer({ onNavigate }: FooterProps) {
                 />
                 <span>{openStatus.isOpen ? 'Open Now' : 'Closed'}</span>
               </div>
-              <p>Monday to Friday: 11:00 AM to 10:00 PM</p>
-              <p>Saturday & Sunday: 11:00 AM to 10:30 PM</p>
+              <p>Daily Operating Hours: 11:00 AM to 8:45 PM IST</p>
               <p className="text-amber-400/90 pt-1">Dine-in, Takeaway & Delivery</p>
             </div>
           </div>
