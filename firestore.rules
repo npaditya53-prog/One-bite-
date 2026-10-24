@@ -52,6 +52,11 @@ service cloud.firestore {
       allow read: if true;
     }
 
+    // System initialization marker doc
+    match /system/{docId} {
+      allow read, write: if true;
+    }
+
     // Admins Collection
     match /admins/{adminId} {
       allow read: if isAdmin();

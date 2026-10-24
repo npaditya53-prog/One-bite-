@@ -43,6 +43,20 @@ import {
   RESTAURANT_CLOSED_MESSAGE,
 } from '../utils/operatingHours.ts';
 import { getStatusDisplayName } from '../utils/orderTimeline.ts';
+import {
+  ensureFirestoreCatalogInitialized,
+  subscribeToMenuItems,
+  subscribeToOffers,
+  subscribeToCategories,
+  subscribeToSettings,
+  saveMenuItemToFirestore,
+  deleteMenuItemFromFirestore,
+  saveOfferToFirestore,
+  deleteOfferFromFirestore,
+  saveCategoryToFirestore,
+  deleteCategoryFromFirestore,
+  saveSettingsToFirestore,
+} from '../services/firestoreCatalog.ts';
 
 export interface OpenStatus {
   isOpen: boolean;
@@ -358,6 +372,53 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     loadData();
     checkAdminAuth();
   }, [loadData, checkAdminAuth]);
+
+  // Authoritative Real-Time Catalog Synchronization (Menu Items, Offers, Categories & Settings)
+  useEffect(() => {
+    // 1. One-time seed guardrail: seed initial catalog only if Firestore is completely uninitialized
+    ensureFirestoreCatalogInitialized().catch((err) => {
+      console.warn('Firestore catalog initialization notice:', err);
+    });
+
+    // 2. Real-Time Menu Items Listener (Broadcasts adds, edits, and permanent deletes live)
+    const unsubMenuItems = subscribeToMenuItems(
+      (items) => {
+        setData((prev) => ({ ...prev, menuItems: items }));
+      },
+      (err) => console.warn('Real-time menuItems sync note:', err)
+    );
+
+    // 3. Real-Time Offers Listener (Broadcasts creates, edits, deactivations, and permanent deletes live)
+    const unsubOffers = subscribeToOffers(
+      (offersList) => {
+        setData((prev) => ({ ...prev, offers: offersList }));
+      },
+      (err) => console.warn('Real-time offers sync note:', err)
+    );
+
+    // 4. Real-Time Categories Listener
+    const unsubCategories = subscribeToCategories(
+      (catList) => {
+        setData((prev) => ({ ...prev, categories: catList }));
+      },
+      (err) => console.warn('Real-time categories sync note:', err)
+    );
+
+    // 5. Real-Time Site Settings Listener
+    const unsubSettings = subscribeToSettings(
+      (siteSettings) => {
+        setData((prev) => ({ ...prev, settings: siteSettings }));
+      },
+      (err) => console.warn('Real-time settings sync note:', err)
+    );
+
+    return () => {
+      unsubMenuItems();
+      unsubOffers();
+      unsubCategories();
+      unsubSettings();
+    };
+  }, []);
 
   // Real-Time Orders Synchronization (Firebase Firestore onSnapshot + Continuous Sync Polling)
   useEffect(() => {
@@ -901,63 +962,74 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   };
 
   const handleUpdateSettings = async (settingsData: Partial<SiteSettings>) => {
-    const updated = await api.updateSettings(settingsData);
-    setData(prev => ({ ...prev, settings: updated }));
+    await saveSettingsToFirestore(settingsData);
+    try {
+      const updated = await api.updateSettings(settingsData);
+      setData(prev => ({ ...prev, settings: updated }));
+    } catch (apiErr) {
+      console.warn('API updateSettings notice:', apiErr);
+    }
   };
 
   const handleSaveCategory = async (categoryData: Partial<Category>) => {
-    const saved = await api.saveCategory(categoryData);
-    setData(prev => {
-      const exists = prev.categories.some(c => c.id === saved.id);
-      const categories = exists
-        ? prev.categories.map(c => (c.id === saved.id ? saved : c))
-        : [...prev.categories, saved];
-      return {
-        ...prev,
-        categories: categories.sort((a, b) => a.displayOrder - b.displayOrder),
-      };
-    });
-    return saved;
+    const savedFs = await saveCategoryToFirestore(categoryData);
+    try {
+      await api.saveCategory(savedFs);
+    } catch (apiErr) {
+      console.warn('API saveCategory notice:', apiErr);
+    }
+    return savedFs;
   };
 
   const handleDeleteCategory = async (id: string) => {
-    await api.deleteCategory(id);
-    setData(prev => ({
-      ...prev,
-      categories: prev.categories.filter(c => c.id !== id),
-    }));
+    await deleteCategoryFromFirestore(id);
+    try {
+      await api.deleteCategory(id);
+    } catch (apiErr) {
+      console.warn('API deleteCategory notice:', apiErr);
+    }
   };
 
   const handleSaveMenuItem = async (itemData: Partial<MenuItem>) => {
-    const saved = await api.saveMenuItem(itemData);
-    setData(prev => {
-      const exists = prev.menuItems.some(i => i.id === saved.id);
-      const menuItems = exists
-        ? prev.menuItems.map(i => (i.id === saved.id ? saved : i))
-        : [...prev.menuItems, saved];
-      return {
-        ...prev,
-        menuItems: menuItems.sort((a, b) => a.displayOrder - b.displayOrder),
-      };
-    });
-    return saved;
+    const savedFs = await saveMenuItemToFirestore(itemData);
+    try {
+      await api.saveMenuItem(savedFs);
+    } catch (apiErr) {
+      console.warn('API saveMenuItem notice:', apiErr);
+    }
+    return savedFs;
   };
 
   const handleDeleteMenuItem = async (id: string) => {
-    await api.deleteMenuItem(id);
-    setData(prev => ({
-      ...prev,
-      menuItems: prev.menuItems.filter(i => i.id !== id),
-    }));
+    await deleteMenuItemFromFirestore(id);
+    try {
+      await api.deleteMenuItem(id);
+    } catch (apiErr) {
+      console.warn('API deleteMenuItem notice:', apiErr);
+    }
   };
 
   const handleDuplicateMenuItem = async (id: string) => {
-    const duplicated = await api.duplicateMenuItem(id);
-    setData(prev => ({
-      ...prev,
-      menuItems: [...prev.menuItems, duplicated].sort((a, b) => a.displayOrder - b.displayOrder),
-    }));
-    return duplicated;
+    const sourceItem = data.menuItems.find(i => i.id === id);
+    if (!sourceItem) {
+      throw new Error('Original menu item not found for duplication');
+    }
+    const duplicatedPayload: Partial<MenuItem> = {
+      ...sourceItem,
+      id: `item_${Date.now()}`,
+      name: `${sourceItem.name} (Copy)`,
+      slug: `${sourceItem.slug}-copy-${Date.now().toString().slice(-4)}`,
+      displayOrder: (sourceItem.displayOrder ?? 0) + 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const duplicatedFs = await saveMenuItemToFirestore(duplicatedPayload);
+    try {
+      await api.duplicateMenuItem(id);
+    } catch (apiErr) {
+      console.warn('API duplicateMenuItem notice:', apiErr);
+    }
+    return duplicatedFs;
   };
 
   const handleSaveGalleryItem = async (photoData: Partial<GalleryItem>) => {
@@ -1004,35 +1076,21 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   };
 
   const handleSaveOffer = async (offerData: Partial<OfferItem>) => {
-    const saved = await api.saveOffer(offerData);
-    setData(prev => {
-      const exists = prev.offers.some(o => o.id === saved.id);
-      const offers = exists
-        ? prev.offers.map(o => (o.id === saved.id ? saved : o))
-        : [saved, ...prev.offers];
-      return { ...prev, offers };
-    });
-
+    const savedFs = await saveOfferToFirestore(offerData);
     try {
-      await setDoc(doc(db, 'offers', saved.id), saved);
-    } catch (fsErr) {
-      console.warn('Firestore offer sync error (non-fatal):', fsErr);
+      await api.saveOffer(savedFs);
+    } catch (apiErr) {
+      console.warn('API saveOffer notice:', apiErr);
     }
-
-    return saved;
+    return savedFs;
   };
 
   const handleDeleteOffer = async (id: string) => {
-    await api.deleteOffer(id);
-    setData(prev => ({
-      ...prev,
-      offers: prev.offers.filter(o => o.id !== id),
-    }));
-
+    await deleteOfferFromFirestore(id);
     try {
-      await deleteDoc(doc(db, 'offers', id));
-    } catch (fsErr) {
-      console.warn('Firestore offer delete error (non-fatal):', fsErr);
+      await api.deleteOffer(id);
+    } catch (apiErr) {
+      console.warn('API deleteOffer notice:', apiErr);
     }
   };
 
