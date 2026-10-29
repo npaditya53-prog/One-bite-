@@ -10,6 +10,7 @@ import { AdminOffers } from './AdminOffers.tsx';
 import { AdminHours } from './AdminHours.tsx';
 import { AdminSettings } from './AdminSettings.tsx';
 import { AdminOrders } from './AdminOrders.tsx';
+import { AdminCoupons } from './AdminCoupons.tsx';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -18,6 +19,7 @@ import {
   Image,
   Star,
   Tag,
+  Ticket,
   Clock,
   Settings,
   LogOut,
@@ -50,6 +52,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
     { id: 'gallery', label: 'Gallery Photos', icon: Image },
     { id: 'reviews', label: 'Customer Reviews', icon: Star },
     { id: 'offers', label: 'Special Offers', icon: Tag },
+    { id: 'coupons', label: 'Coupon Codes', icon: Ticket },
     { id: 'hours', label: 'Business Hours', icon: Clock },
     { id: 'settings', label: 'Website Settings', icon: Settings },
   ];
@@ -167,6 +170,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
           {activeTab === 'gallery' && <AdminGallery />}
           {activeTab === 'reviews' && <AdminReviews />}
           {activeTab === 'offers' && <AdminOffers />}
+          {activeTab === 'coupons' && <AdminCoupons />}
           {activeTab === 'hours' && <AdminHours />}
           {activeTab === 'settings' && <AdminSettings />}
         </main>

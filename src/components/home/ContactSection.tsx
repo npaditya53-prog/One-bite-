@@ -112,10 +112,13 @@ export function ContactSection() {
                   href={settings.instagramUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 rounded-lg bg-stone-200/80 hover:bg-stone-300 text-stone-800 transition-colors"
-                  aria-label="Instagram"
+                  referrerPolicy="no-referrer"
+                  className="p-2 rounded-lg bg-pink-100 text-pink-700 hover:bg-pink-200 transition-colors flex items-center gap-1.5 text-xs font-bold"
+                  aria-label="Instagram @onebite_motihari"
+                  title="Follow @onebite_motihari on Instagram"
                 >
                   <Instagram className="w-4 h-4" />
+                  <span>@onebite_motihari</span>
                 </a>
               )}
               {settings.facebookUrl && (

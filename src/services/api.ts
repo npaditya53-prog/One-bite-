@@ -1,4 +1,4 @@
-import { DatabaseSchema, SiteSettings, Category, MenuItem, GalleryItem, ReviewItem, OfferItem, BusinessDayHours, CustomerOrder } from '../types/index.ts';
+import { DatabaseSchema, SiteSettings, Category, MenuItem, GalleryItem, ReviewItem, OfferItem, Coupon, BusinessDayHours, CustomerOrder } from '../types/index.ts';
 import { initialData } from '../data/initialData.ts';
 
 const TOKEN_KEY = 'onebite_admin_token';
@@ -432,6 +432,49 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to delete offer' }));
       throw new Error(err.error || 'Failed to delete offer');
+    }
+  },
+
+  async createCoupon(coupon: Partial<Coupon>): Promise<Coupon> {
+    const res = await fetch('/api/coupons', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(coupon),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to create coupon' }));
+      throw new Error(err.error || 'Failed to create coupon');
+    }
+    return await res.json();
+  },
+
+  async updateCoupon(id: string, coupon: Partial<Coupon>): Promise<Coupon> {
+    const res = await fetch(`/api/coupons/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(coupon),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update coupon' }));
+      throw new Error(err.error || 'Failed to update coupon');
+    }
+    return await res.json();
+  },
+
+  async deleteCoupon(id: string): Promise<void> {
+    const res = await fetch(`/api/coupons/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to delete coupon' }));
+      throw new Error(err.error || 'Failed to delete coupon');
     }
   },
 

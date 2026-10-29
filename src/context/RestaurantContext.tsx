@@ -11,6 +11,8 @@ import {
   GalleryItem,
   ReviewItem,
   OfferItem,
+  Coupon,
+  CouponValidationResult,
   BusinessDayHours,
 } from '../types/index.ts';
 import { initialData } from '../data/initialData.ts';
@@ -38,6 +40,10 @@ import {
   CartDiscountResult,
 } from '../utils/offerUtils.ts';
 import {
+  validateAndCalculateCoupon,
+  normalizeCouponCode,
+} from '../utils/couponUtils.ts';
+import {
   isRestaurantOpen,
   getLiveOperatingStatus,
   RESTAURANT_CLOSED_MESSAGE,
@@ -49,6 +55,7 @@ import {
   subscribeToOffers,
   subscribeToCategories,
   subscribeToSettings,
+  subscribeToCoupons,
   saveMenuItemToFirestore,
   deleteMenuItemFromFirestore,
   saveOfferToFirestore,
@@ -56,6 +63,8 @@ import {
   saveCategoryToFirestore,
   deleteCategoryFromFirestore,
   saveSettingsToFirestore,
+  saveCouponToFirestore,
+  deleteCouponFromFirestore,
 } from '../services/firestoreCatalog.ts';
 
 export interface OpenStatus {
@@ -74,6 +83,7 @@ interface RestaurantContextType {
   gallery: GalleryItem[];
   reviews: ReviewItem[];
   offers: OfferItem[];
+  coupons: Coupon[];
   businessHours: BusinessDayHours[];
   orders: CustomerOrder[];
   isLoading: boolean;
@@ -95,6 +105,9 @@ interface RestaurantContextType {
   appliedOffer: OfferItem | null;
   applyOffer: (offerOrCode: OfferItem | string) => { success: boolean; message: string };
   removeOffer: () => void;
+  appliedCoupon: Coupon | null;
+  applyCoupon: (code: string, customerPhone?: string) => { success: boolean; message: string; discountAmount: number };
+  removeCoupon: () => void;
   cartDiscount: CartDiscountResult;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
@@ -151,6 +164,8 @@ interface RestaurantContextType {
   deleteReview: (id: string) => Promise<void>;
   saveOffer: (offer: Partial<OfferItem>) => Promise<OfferItem>;
   deleteOffer: (id: string) => Promise<void>;
+  saveCoupon: (coupon: Partial<Coupon>) => Promise<Coupon>;
+  deleteCoupon: (id: string) => Promise<void>;
   saveBusinessHours: (hours: BusinessDayHours[]) => Promise<void>;
   uploadImage: (data: string, filename?: string) => Promise<string>;
   resetToDefaults: () => Promise<void>;
@@ -317,6 +332,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   const [isClosedModalOpen, setIsClosedModalOpen] = useState(false);
   const [selectedVariantItem, setSelectedVariantItem] = useState<MenuItem | null>(null);
   const [appliedOffer, setAppliedOffer] = useState<OfferItem | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
   const isPlacingOrderRef = useRef(false);
 
   // Auto-updating IST clock ticker (every 5 seconds) to ensure status changes without page refresh
@@ -412,11 +429,21 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       (err) => console.warn('Real-time settings sync note:', err)
     );
 
+    // 6. Real-Time Coupons Listener
+    const unsubCoupons = subscribeToCoupons(
+      (couponsList) => {
+        setData((prev) => ({ ...prev, coupons: couponsList }));
+        setCoupons(couponsList);
+      },
+      (err) => console.warn('Real-time coupons sync note:', err)
+    );
+
     return () => {
       unsubMenuItems();
       unsubOffers();
       unsubCategories();
       unsubSettings();
+      unsubCoupons();
     };
   }, []);
 
@@ -521,8 +548,20 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   }, [cart]);
 
   const cartDiscount = useMemo(() => {
+    if (appliedCoupon) {
+      const res = validateAndCalculateCoupon(appliedCoupon, cartTotal, cart, undefined, orders);
+      return {
+        isEligible: res.valid,
+        discountTotal: res.discountAmount,
+        subtotal: cartTotal,
+        finalTotal: Math.max(0, cartTotal - res.discountAmount),
+        message: res.message,
+        eligibleCount: cart.length,
+        appliedOffer: null,
+      };
+    }
     return calculateCartDiscount(cart, appliedOffer, data.menuItems);
-  }, [cart, appliedOffer, data.menuItems]);
+  }, [cart, cartTotal, appliedCoupon, appliedOffer, data.menuItems, orders]);
 
   const applyOffer = useCallback(
     (offerOrCode: OfferItem | string) => {
@@ -549,10 +588,46 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       }
 
       setAppliedOffer(targetOffer);
+      setAppliedCoupon(null);
       return { success: true, message: `Offer "${targetOffer.title}" applied successfully!` };
     },
     [cart, data.offers, data.menuItems]
   );
+
+  const applyCoupon = useCallback(
+    (code: string, customerPhone?: string) => {
+      const cleanCode = normalizeCouponCode(code);
+      if (!cleanCode) {
+        return { success: false, message: 'Please enter a coupon code.', discountAmount: 0 };
+      }
+
+      const allCoupons = data.coupons && data.coupons.length > 0 ? data.coupons : coupons;
+      const targetCoupon = allCoupons.find(c => normalizeCouponCode(c.code) === cleanCode);
+
+      if (!targetCoupon) {
+        const matchedOffer = data.offers.find(o => o.code && o.code.toUpperCase() === cleanCode);
+        if (matchedOffer) {
+          const offerRes = applyOffer(matchedOffer);
+          return { success: offerRes.success, message: offerRes.message, discountAmount: 0 };
+        }
+        return { success: false, message: `Invalid coupon code '${cleanCode}'. Please check and try again.`, discountAmount: 0 };
+      }
+
+      const result = validateAndCalculateCoupon(targetCoupon, cartTotal, cart, customerPhone, orders);
+      if (!result.valid) {
+        return { success: false, message: result.message, discountAmount: 0 };
+      }
+
+      setAppliedCoupon(targetCoupon);
+      setAppliedOffer(null);
+      return { success: true, message: result.message, discountAmount: result.discountAmount };
+    },
+    [cart, cartTotal, data.coupons, coupons, data.offers, orders, applyOffer]
+  );
+
+  const removeCoupon = useCallback(() => {
+    setAppliedCoupon(null);
+  }, []);
 
   const removeOffer = useCallback(() => {
     setAppliedOffer(null);
@@ -714,7 +789,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         subtotal,
         addonsTotal,
         discountAmount: discountAmount > 0 ? discountAmount : undefined,
-        appliedOfferTitle: discountAmount > 0 && appliedOffer ? appliedOffer.title : undefined,
+        appliedOfferTitle: discountAmount > 0 && appliedCoupon ? `Coupon: ${appliedCoupon.code}` : (discountAmount > 0 && appliedOffer ? appliedOffer.title : undefined),
+        appliedCouponCode: discountAmount > 0 && appliedCoupon ? appliedCoupon.code : undefined,
         deliveryCharge,
         totalAmount: finalTotal,
         paymentMethod: 'pay_on_delivery',
@@ -804,7 +880,11 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       msg += `PAYMENT SUMMARY\n`;
       msg += `Food Subtotal: ₹${foodSubtotal}\n`;
       if (discountAmount > 0) {
-        msg += `Discount: -₹${discountAmount}\n`;
+        if (appliedCoupon) {
+          msg += `Coupon Discount (${appliedCoupon.code}): -₹${discountAmount}\n`;
+        } else {
+          msg += `Discount: -₹${discountAmount}\n`;
+        }
       }
       msg += `Delivery Charge: ${deliveryCharge === 0 ? '₹0 (FREE DELIVERY)' : `₹${deliveryCharge}`}\n`;
       msg += `FINAL PAYABLE AMOUNT: ₹${finalTotal}\n\n`;
@@ -1091,6 +1171,25 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const handleSaveCoupon = async (couponData: Partial<Coupon>) => {
+    const savedFs = await saveCouponToFirestore(couponData);
+    try {
+      await api.createCoupon(savedFs).catch(() => api.updateCoupon(savedFs.id, savedFs));
+    } catch (apiErr) {
+      console.warn('API saveCoupon notice:', apiErr);
+    }
+    return savedFs;
+  };
+
+  const handleDeleteCoupon = async (id: string) => {
+    await deleteCouponFromFirestore(id);
+    try {
+      await api.deleteCoupon(id);
+    } catch (apiErr) {
+      console.warn('API deleteCoupon notice:', apiErr);
+    }
+  };
+
   const handleSaveBusinessHours = async (hours: BusinessDayHours[]) => {
     const saved = await api.updateBusinessHours(hours);
     setData(prev => ({ ...prev, businessHours: saved }));
@@ -1246,6 +1345,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         gallery: data.gallery,
         reviews: data.reviews,
         offers: data.offers,
+        coupons: data.coupons || coupons,
         businessHours: data.businessHours,
         orders,
         isLoading,
@@ -1267,6 +1367,9 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         appliedOffer,
         applyOffer,
         removeOffer,
+        appliedCoupon,
+        applyCoupon,
+        removeCoupon,
         cartDiscount,
         isCartOpen,
         setIsCartOpen,
@@ -1302,6 +1405,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         deleteReview: handleDeleteReview,
         saveOffer: handleSaveOffer,
         deleteOffer: handleDeleteOffer,
+        saveCoupon: handleSaveCoupon,
+        deleteCoupon: handleDeleteCoupon,
         saveBusinessHours: handleSaveBusinessHours,
         uploadImage: handleUploadImage,
         resetToDefaults: handleResetToDefaults,

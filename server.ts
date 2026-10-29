@@ -99,6 +99,7 @@ function updateCatalogCache() {
     gallery: database.gallery,
     reviews: database.reviews,
     offers: database.offers,
+    coupons: database.coupons || [],
     businessHours: database.businessHours,
   };
   catalogPayload = JSON.stringify(data);
@@ -385,6 +386,125 @@ app.get('/api/data', (req: Request, res: Response) => {
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.send(catalogPayload);
+});
+
+// 1b. Instagram Feed Endpoint with Graph API integration & server-cached fallback
+let instagramFeedCache: { timestamp: number; payload: any } | null = null;
+const INSTAGRAM_CACHE_TTL_MS = 15 * 60 * 1000; // 15 mins
+
+app.get('/api/instagram/feed', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
+
+  const now = Date.now();
+  if (instagramFeedCache && now - instagramFeedCache.timestamp < INSTAGRAM_CACHE_TTL_MS) {
+    return res.json(instagramFeedCache.payload);
+  }
+
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const officialProfile = {
+    handle: '@onebite_motihari',
+    name: 'ONE BITE – Motihari',
+    bio: 'Motihari\'s favorite fast-food family spot! 🍔 Potato Tornados, Chicken Buckets, Pizza & Shakes. 📍 Arya Samaj Chowk, Motihari',
+    url: database?.settings?.instagramUrl || 'https://www.instagram.com/onebite_motihari/',
+    isOfficial: true,
+  };
+
+  if (token) {
+    try {
+      const graphRes = await fetch(
+        `https://graph.instagram.com/me/media?fields=id,caption,media_type,media_url,permalink,thumbnail_url,timestamp&limit=9&access_token=${encodeURIComponent(
+          token
+        )}`
+      );
+      if (graphRes.ok) {
+        const raw = await graphRes.json();
+        const posts = (raw.data || []).map((item: any) => ({
+          id: item.id,
+          type: item.media_type,
+          mediaUrl: item.media_type === 'VIDEO' ? (item.thumbnail_url || item.media_url) : item.media_url,
+          permalink: item.permalink || officialProfile.url,
+          caption: item.caption || 'ONE BITE Motihari Fast Food Highlights',
+          timestamp: item.timestamp,
+        }));
+
+        const payload = {
+          profile: officialProfile,
+          posts,
+          liveSync: true,
+        };
+        instagramFeedCache = { timestamp: now, payload };
+        return res.json(payload);
+      }
+    } catch (err) {
+      console.warn('Instagram Graph API query failed, returning curated showcase:', err);
+    }
+  }
+
+  // Curated official ONE BITE Motihari media showcase
+  const curatedPosts = [
+    {
+      id: 'ob_ig_1',
+      type: 'IMAGE',
+      mediaUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80',
+      permalink: officialProfile.url,
+      caption: 'Handcrafted Juicy Burgers loaded with melted cheese! Visit us at Arya Samaj Chowk, Motihari. 🍔✨ #OneBiteMotihari',
+      likes: '1.2k',
+      comments: '84',
+    },
+    {
+      id: 'ob_ig_2',
+      type: 'IMAGE',
+      mediaUrl: 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&w=800&q=80',
+      permalink: officialProfile.url,
+      caption: 'Golden Crispy Chicken Bucket — Freshly fried to perfection on every order! 🍗🔥 #OneBiteChicken #Motihari',
+      likes: '950',
+      comments: '62',
+    },
+    {
+      id: 'ob_ig_3',
+      type: 'IMAGE',
+      mediaUrl: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80',
+      permalink: officialProfile.url,
+      caption: 'Pure Mozzarella Cheese Loaded Pizza straight out of the hot oven! 🍕🧀 #CheeseLovers #MotihariEats',
+      likes: '1.8k',
+      comments: '110',
+    },
+    {
+      id: 'ob_ig_4',
+      type: 'IMAGE',
+      mediaUrl: 'https://images.unsplash.com/photo-1572802419224-296b0aeee0d9?auto=format&fit=crop&w=800&q=80',
+      permalink: officialProfile.url,
+      caption: 'Signature Crispy Spiral Potato Tornado with special peri-peri seasoning! 🌪️🍟 #PotatoTornado #OneBite',
+      likes: '2.1k',
+      comments: '145',
+    },
+    {
+      id: 'ob_ig_5',
+      type: 'IMAGE',
+      mediaUrl: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?auto=format&fit=crop&w=800&q=80',
+      permalink: officialProfile.url,
+      caption: 'Rich Belgian Choco Lava Cake & Thick Chocolate Milkshakes! Pure bliss in Motihari. 🍫🥤 #OneBiteDesserts',
+      likes: '1.4k',
+      comments: '92',
+    },
+    {
+      id: 'ob_ig_6',
+      type: 'IMAGE',
+      mediaUrl: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=800&q=80',
+      permalink: officialProfile.url,
+      caption: 'Warm, cozy family dining experience at ONE BITE Motihari. Bring your friends & family today! 👨‍👩‍👧‍👦❤️',
+      likes: '1.6k',
+      comments: '78',
+    },
+  ];
+
+  const payload = {
+    profile: officialProfile,
+    posts: curatedPosts,
+    liveSync: false,
+  };
+  instagramFeedCache = { timestamp: now, payload };
+  return res.json(payload);
 });
 
 // 2. Auth Endpoints: Email & Password Login
@@ -1273,6 +1393,117 @@ app.delete('/api/offers/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// 8.5 Coupons Endpoints
+app.get('/api/coupons', (_req, res) => {
+  if (!database.coupons) database.coupons = [];
+  res.json(database.coupons);
+});
+
+app.post('/api/coupons', requireAdmin, (req, res) => {
+  const {
+    code,
+    description,
+    discountType,
+    discountValue,
+    minOrderAmount,
+    maxDiscount,
+    expiryDate,
+    usageLimit,
+    perCustomerLimit,
+    applicabilityType,
+    applicableCategoryIds,
+    applicableItemIds,
+    isActive,
+  } = req.body || {};
+
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'Coupon code is required' });
+  }
+
+  const cleanCode = code.trim().toUpperCase();
+  if (cleanCode.length < 2) {
+    return res.status(400).json({ error: 'Coupon code must be at least 2 characters long' });
+  }
+
+  if (!database.coupons) database.coupons = [];
+  const existing = database.coupons.find(c => c.code === cleanCode);
+  if (existing) {
+    return res.status(400).json({ error: `Coupon code '${cleanCode}' already exists` });
+  }
+
+  const newCoupon = {
+    id: 'coup_' + Date.now(),
+    code: cleanCode,
+    description: sanitizeText(description, 500),
+    discountType: discountType === 'percentage' ? ('percentage' as const) : ('fixed' as const),
+    discountValue: Math.max(0, Number(discountValue) || 0),
+    minOrderAmount: Math.max(0, Number(minOrderAmount) || 0),
+    maxDiscount: maxDiscount ? Math.max(0, Number(maxDiscount)) : null,
+    expiryDate: expiryDate || null,
+    usageLimit: usageLimit ? Math.max(0, Number(usageLimit)) : null,
+    perCustomerLimit: perCustomerLimit ? Math.max(1, Number(perCustomerLimit)) : 1,
+    usedCount: 0,
+    applicabilityType: applicabilityType || 'all',
+    applicableCategoryIds: Array.isArray(applicableCategoryIds) ? applicableCategoryIds : [],
+    applicableItemIds: Array.isArray(applicableItemIds) ? applicableItemIds : [],
+    isActive: isActive !== undefined ? Boolean(isActive) : true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  database.coupons.push(newCoupon);
+  saveDatabase(database);
+  res.status(201).json(newCoupon);
+});
+
+app.put('/api/coupons/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  if (!database.coupons) database.coupons = [];
+  const idx = database.coupons.findIndex(c => c.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Coupon not found' });
+  }
+
+  const b = req.body || {};
+  const updatedCode = b.code ? b.code.trim().toUpperCase() : database.coupons[idx].code;
+
+  if (updatedCode !== database.coupons[idx].code) {
+    const dup = database.coupons.find(c => c.id !== id && c.code === updatedCode);
+    if (dup) {
+      return res.status(400).json({ error: `Coupon code '${updatedCode}' is already in use` });
+    }
+  }
+
+  database.coupons[idx] = {
+    ...database.coupons[idx],
+    code: updatedCode,
+    description: b.description !== undefined ? sanitizeText(b.description, 500) : database.coupons[idx].description,
+    discountType: b.discountType === 'percentage' ? 'percentage' : (b.discountType === 'fixed' ? 'fixed' : database.coupons[idx].discountType),
+    discountValue: b.discountValue !== undefined ? Math.max(0, Number(b.discountValue) || 0) : database.coupons[idx].discountValue,
+    minOrderAmount: b.minOrderAmount !== undefined ? Math.max(0, Number(b.minOrderAmount) || 0) : database.coupons[idx].minOrderAmount,
+    maxDiscount: b.maxDiscount !== undefined ? (b.maxDiscount ? Math.max(0, Number(b.maxDiscount)) : null) : database.coupons[idx].maxDiscount,
+    expiryDate: b.expiryDate !== undefined ? (b.expiryDate || null) : database.coupons[idx].expiryDate,
+    usageLimit: b.usageLimit !== undefined ? (b.usageLimit ? Math.max(0, Number(b.usageLimit)) : null) : database.coupons[idx].usageLimit,
+    perCustomerLimit: b.perCustomerLimit !== undefined ? (b.perCustomerLimit ? Math.max(1, Number(b.perCustomerLimit)) : 1) : database.coupons[idx].perCustomerLimit,
+    isActive: b.isActive !== undefined ? Boolean(b.isActive) : database.coupons[idx].isActive,
+    applicabilityType: b.applicabilityType || database.coupons[idx].applicabilityType,
+    applicableCategoryIds: Array.isArray(b.applicableCategoryIds) ? b.applicableCategoryIds : database.coupons[idx].applicableCategoryIds,
+    applicableItemIds: Array.isArray(b.applicableItemIds) ? b.applicableItemIds : database.coupons[idx].applicableItemIds,
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveDatabase(database);
+  res.json(database.coupons[idx]);
+});
+
+app.delete('/api/coupons/:id', requireAdmin, (req, res) => {
+  const { id } = req.params;
+  if (!database.coupons) database.coupons = [];
+  database.coupons = database.coupons.filter(c => c.id !== id);
+  saveDatabase(database);
+  res.json({ success: true });
+});
+
 // 9. Business Hours Endpoints
 app.get('/api/hours', (_req, res) => {
   res.json(database.businessHours);
@@ -1426,6 +1657,7 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     notes,
     items,
     appliedOfferTitle,
+    appliedCouponCode,
     isDryRun,
   } = req.body;
 
@@ -1509,11 +1741,66 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     }
   }
 
-  // 2. Authoritative Server-Side Offer Validation
+  // 2. Authoritative Server-Side Coupon & Offer Validation
   let authoritativeDiscount = 0;
   let finalOfferTitle = '';
+  let finalAppliedCouponCode = '';
 
-  if (appliedOfferTitle && typeof appliedOfferTitle === 'string') {
+  const cleanCouponCode = appliedCouponCode ? String(appliedCouponCode).trim().toUpperCase() : '';
+  if (cleanCouponCode && Array.isArray(database.coupons)) {
+    const coupon = database.coupons.find(c => c.code === cleanCouponCode);
+    if (coupon && coupon.isActive !== false) {
+      const isNotExpired = !coupon.expiryDate || new Date(coupon.expiryDate).getTime() > Date.now();
+      const isUnderUsageLimit = !coupon.usageLimit || (coupon.usedCount || 0) < coupon.usageLimit;
+
+      const perCustomerLimit = coupon.perCustomerLimit || 1;
+      const previousCustomerUses = (database.orders || []).filter(o => {
+        if (o.status === 'cancelled') return false;
+        const oPhone = (o.customerPhone || '').replace(/[^0-9]/g, '');
+        const samePhone = oPhone === cleanPhone || (cleanPhone.length === 10 && oPhone.endsWith(cleanPhone));
+        const matchedCode = (o as any).appliedCouponCode === cleanCouponCode || o.appliedOfferTitle?.toUpperCase().includes(cleanCouponCode);
+        return samePhone && matchedCode;
+      }).length;
+
+      const isUnderCustomerLimit = previousCustomerUses < perCustomerLimit;
+      const totalFoodSubtotal = authoritativeSubtotal + authoritativeAddonsTotal;
+      const isMinOrderMet = totalFoodSubtotal >= (coupon.minOrderAmount || 0);
+
+      if (isNotExpired && isUnderUsageLimit && isUnderCustomerLimit && isMinOrderMet) {
+        let eligibleSubtotal = totalFoodSubtotal;
+        if (coupon.applicabilityType === 'categories' && coupon.applicableCategoryIds?.length) {
+          eligibleSubtotal = validatedItems
+            .filter(i => i.categoryName && coupon.applicableCategoryIds?.includes(i.categoryName))
+            .reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+        } else if (coupon.applicabilityType === 'items' && coupon.applicableItemIds?.length) {
+          eligibleSubtotal = validatedItems
+            .filter(i => coupon.applicableItemIds?.includes(i.id || i.menuItemId))
+            .reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+        }
+
+        if (eligibleSubtotal > 0) {
+          finalAppliedCouponCode = coupon.code;
+          finalOfferTitle = `Coupon: ${coupon.code}`;
+
+          if (coupon.discountType === 'percentage') {
+            const rawDiscount = Math.round((eligibleSubtotal * coupon.discountValue) / 100);
+            authoritativeDiscount = coupon.maxDiscount ? Math.min(rawDiscount, coupon.maxDiscount) : rawDiscount;
+          } else {
+            authoritativeDiscount = Math.min(eligibleSubtotal, coupon.discountValue);
+          }
+
+          authoritativeDiscount = Math.max(0, Math.min(eligibleSubtotal, Math.round(authoritativeDiscount)));
+
+          if (!isLoadTestDryRun) {
+            coupon.usedCount = (coupon.usedCount || 0) + 1;
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback to legacy offers if coupon was not applied
+  if (!finalAppliedCouponCode && appliedOfferTitle && typeof appliedOfferTitle === 'string') {
     const offer = database.offers.find(o => o.title.toLowerCase() === appliedOfferTitle.trim().toLowerCase() || o.code === appliedOfferTitle.trim().toUpperCase());
     if (offer && offer.active !== false && offer.status !== 'paused' && offer.status !== 'draft') {
       const now = new Date();
@@ -1597,6 +1884,7 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     addonsTotal: authoritativeAddonsTotal,
     discountAmount: authoritativeDiscount,
     appliedOfferTitle: finalOfferTitle || undefined,
+    appliedCouponCode: finalAppliedCouponCode || undefined,
     deliveryCharge,
     totalAmount: authoritativeTotal,
     paymentMethod: 'pay_on_delivery' as const,

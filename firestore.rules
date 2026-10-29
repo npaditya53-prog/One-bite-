@@ -205,6 +205,23 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(offerId);
     }
 
+    // Coupons
+    function isValidCoupon(data) {
+      return data.code is string && data.code.size() > 0 && data.code.size() <= 100 &&
+             data.discountType is string && (data.discountType == 'percentage' || data.discountType == 'fixed') &&
+             data.discountValue is number && data.discountValue >= 0 &&
+             data.minOrderAmount is number && data.minOrderAmount >= 0 &&
+             data.isActive is bool;
+    }
+
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidId(couponId) && isValidCoupon(incoming());
+      allow update: if (isAdmin() && isValidId(couponId) && isValidCoupon(incoming())) ||
+                     (isValidId(couponId) && isValidCoupon(incoming()) && incoming().code == existing().code && incoming().usedCount == existing().usedCount + 1);
+      allow delete: if isAdmin() && isValidId(couponId);
+    }
+
     // Business Hours
     function isValidBusinessHour(data) {
       return data.day is string && data.day.size() <= 50 &&

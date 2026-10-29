@@ -37,6 +37,10 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     cartTotal,
     cartDiscount,
     appliedOffer,
+    appliedCoupon,
+    applyCoupon,
+    removeCoupon,
+    coupons,
     placeOrder,
     settings,
     firebaseUser,
@@ -880,12 +884,33 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                 <span>Items Subtotal</span>
                 <span className="font-semibold text-stone-900">₹{cartTotal}</span>
               </div>
-              {appliedOffer && cartDiscount.discountTotal > 0 && (
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono font-extrabold text-emerald-900">
+                      Coupon Applied: ({appliedCoupon.code})
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-emerald-700">-₹{cartDiscount.discountTotal}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        removeCoupon();
+                        showToast('Coupon code removed', 'info');
+                      }}
+                      className="text-[11px] font-bold text-rose-600 hover:text-rose-800 p-0.5 cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : appliedOffer && cartDiscount.discountTotal > 0 ? (
                 <div className="flex justify-between text-emerald-700 font-bold">
                   <span>Special Discount ({appliedOffer.title})</span>
                   <span>-₹{cartDiscount.discountTotal}</span>
                 </div>
-              )}
+              ) : null}
               {/* Free delivery prompt banner */}
               {foodSubtotal > 0 && foodSubtotal < 400 ? (
                 <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl px-3 py-2 text-xs text-amber-900 font-medium flex items-center justify-between">

@@ -12,6 +12,7 @@ import {
   Clock,
   LogIn,
   LogOut,
+  Instagram,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -152,6 +153,20 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
               >
                 <Phone className="w-3.5 h-3.5 text-amber-400" />
                 <span>{settings.phone}</span>
+              </a>
+            )}
+
+            {settings.instagramUrl && (
+              <a
+                href={settings.instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+                className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl bg-gradient-to-r from-pink-600/30 via-rose-500/20 to-amber-500/30 hover:from-pink-600/50 hover:to-amber-500/50 text-pink-300 border border-pink-500/30 text-xs font-bold transition-all cursor-pointer"
+                title="Follow ONE BITE Motihari on Instagram @onebite_motihari"
+              >
+                <Instagram className="w-3.5 h-3.5 text-pink-400" />
+                <span className="hidden xl:inline">@onebite_motihari</span>
               </a>
             )}
 
@@ -402,14 +417,17 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
                 </a>
               )}
 
-              {settings.email && (
+              {settings.instagramUrl && (
                 <a
-                  href={`mailto:${settings.email}`}
-                  className="inline-flex items-center gap-2 text-stone-300 hover:text-amber-400 font-semibold"
-                  title="Send Email to Restaurant"
+                  href={settings.instagramUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  referrerPolicy="no-referrer"
+                  className="inline-flex items-center gap-2 text-pink-300 hover:text-pink-200 font-bold text-xs pt-1"
+                  title="Follow ONE BITE Motihari on Instagram @onebite_motihari"
                 >
-                  <span className="text-amber-400 font-bold">@</span>
-                  <span>{settings.email}</span>
+                  <Instagram className="w-3.5 h-3.5 text-pink-400" />
+                  <span>Follow Us on Instagram (@onebite_motihari)</span>
                 </a>
               )}
             </div>

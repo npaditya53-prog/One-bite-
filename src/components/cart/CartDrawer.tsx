@@ -40,6 +40,10 @@ export function CartDrawer() {
     appliedOffer,
     applyOffer,
     removeOffer,
+    appliedCoupon,
+    applyCoupon,
+    removeCoupon,
+    coupons,
     cartDiscount,
     activeOffers,
     placeOrder,
@@ -382,7 +386,33 @@ export function CartDrawer() {
                     )}
                   </div>
 
-                  {appliedOffer ? (
+                  {appliedCoupon ? (
+                    <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 bg-emerald-600 text-white rounded-md">
+                          <Check className="w-3.5 h-3.5" />
+                        </span>
+                        <div>
+                          <span className="text-xs font-extrabold text-emerald-900 block font-mono">
+                            COUPON: {appliedCoupon.code}
+                          </span>
+                          <span className="text-[11px] text-emerald-700 font-semibold block">
+                            Saving ₹{cartDiscount.discountTotal} on your order
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          removeCoupon();
+                          showToast('Coupon removed.', 'info');
+                        }}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : appliedOffer ? (
                     <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
                       <div className="flex items-center gap-2">
                         <span className="p-1 bg-emerald-600 text-white rounded-md">
@@ -412,7 +442,7 @@ export function CartDrawer() {
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Enter coupon code"
+                        placeholder="Enter coupon code (e.g. ONEBITE20)"
                         value={couponCodeInput}
                         onChange={e => setCouponCodeInput(e.target.value.toUpperCase())}
                         className="flex-1 px-3 py-1.5 text-xs font-mono uppercase bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -424,7 +454,7 @@ export function CartDrawer() {
                             showToast('Please enter a coupon code', 'error');
                             return;
                           }
-                          const res = applyOffer(couponCodeInput);
+                          const res = applyCoupon(couponCodeInput, customerPhone);
                           if (res.success) {
                             showToast(res.message, 'success');
                             setCouponCodeInput('');

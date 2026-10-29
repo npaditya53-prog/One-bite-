@@ -189,6 +189,31 @@
         "createdAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["email", "role"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Custom coupon codes with discount values, minimum order amounts, usage limits, and expiration rules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed"] },
+        "discountValue": { "type": "number" },
+        "minOrderAmount": { "type": "number" },
+        "maxDiscount": { "type": "number" },
+        "expiryDate": { "type": "string", "maxLength": 100 },
+        "usageLimit": { "type": "number" },
+        "perCustomerLimit": { "type": "number" },
+        "usedCount": { "type": "number" },
+        "applicabilityType": { "type": "string", "enum": ["all", "categories", "items"] },
+        "applicableCategoryIds": { "type": "array", "items": { "type": "string" } },
+        "applicableItemIds": { "type": "array", "items": { "type": "string" } },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["code", "discountType", "discountValue", "minOrderAmount", "isActive"]
     }
   },
   "firestore": {
@@ -219,6 +244,10 @@
     "/offers/{offerId}": {
       "schema": { "$ref": "#/entities/OfferItem" },
       "description": "Deals and promotions"
+    },
+    "/coupons/{couponId}": {
+      "schema": { "$ref": "#/entities/Coupon" },
+      "description": "Coupon codes and discount rules"
     },
     "/businessHours/{dayId}": {
       "schema": { "$ref": "#/entities/BusinessHours" },

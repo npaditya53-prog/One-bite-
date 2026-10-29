@@ -12,6 +12,7 @@ import { WhyChooseUs } from './components/home/WhyChooseUs.tsx';
 import { GallerySection } from './components/gallery/GallerySection.tsx';
 import { LocationSection } from './components/location/LocationSection.tsx';
 import { ReviewsSection } from './components/home/ReviewsSection.tsx';
+import { InstagramSection } from './components/home/InstagramSection.tsx';
 import { ContactSection } from './components/home/ContactSection.tsx';
 import { Footer } from './components/layout/Footer.tsx';
 import { MobileStickyCta } from './components/layout/MobileStickyCta.tsx';
@@ -344,6 +345,7 @@ function MainContent() {
             {enabled.gallery && <GallerySection />}
             {enabled.location && <LocationSection />}
             {enabled.reviews && <ReviewsSection />}
+            {(enabled.instagram ?? true) && <InstagramSection />}
             {enabled.contact && <ContactSection />}
           </>
         )}

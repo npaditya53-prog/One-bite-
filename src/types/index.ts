@@ -50,6 +50,7 @@ export interface SiteSettings {
     hours: boolean;
     location: boolean;
     contact: boolean;
+    instagram?: boolean;
   };
   deliveryCharge?: number;
   freeDeliveryThreshold?: number;
@@ -133,6 +134,7 @@ export interface CustomerOrder {
   addonsTotal: number;
   discountAmount?: number;
   appliedOfferTitle?: string;
+  appliedCouponCode?: string;
   deliveryCharge?: number;
   totalAmount: number;
   paymentMethod?: 'pay_on_delivery';
@@ -222,6 +224,36 @@ export interface OfferItem {
   updatedAt?: string;
 }
 
+export type CouponDiscountType = 'percentage' | 'fixed';
+export type CouponApplicabilityType = 'all' | 'categories' | 'items';
+
+export interface Coupon {
+  id: string;
+  code: string; // Trimmed uppercase code e.g. "ONEBITE50"
+  description?: string;
+  discountType: CouponDiscountType; // 'percentage' | 'fixed'
+  discountValue: number; // e.g. 20 for 20% or 50 for ₹50
+  minOrderAmount: number; // e.g. 200 for ₹200
+  maxDiscount?: number | null; // Optional cap for percentage discounts in ₹
+  expiryDate?: string | null; // ISO string e.g. "2026-12-31T23:59:59Z" or "YYYY-MM-DDTHH:mm"
+  usageLimit?: number | null; // Max total global uses across all customers
+  perCustomerLimit?: number | null; // Max uses per customer phone/account (default: 1)
+  usedCount: number; // Tracked redemptions
+  applicabilityType?: CouponApplicabilityType; // 'all' | 'categories' | 'items'
+  applicableCategoryIds?: string[];
+  applicableItemIds?: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CouponValidationResult {
+  valid: boolean;
+  message: string;
+  discountAmount: number;
+  coupon?: Coupon;
+}
+
 export interface BusinessDayHours {
   id: string;
   day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
@@ -237,6 +269,7 @@ export interface DatabaseSchema {
   gallery: GalleryItem[];
   reviews: ReviewItem[];
   offers: OfferItem[];
+  coupons?: Coupon[];
   businessHours: BusinessDayHours[];
   orders?: CustomerOrder[];
   adminSessionToken?: string;

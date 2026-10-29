@@ -9,7 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db, sanitizeOrderForFirestore } from './firebase.ts';
 import { initialData } from '../data/initialData.ts';
-import { Category, MenuItem, OfferItem, SiteSettings } from '../types/index.ts';
+import { Category, MenuItem, OfferItem, SiteSettings, Coupon } from '../types/index.ts';
 
 const INIT_DOC_PATH = doc(db, 'system', 'catalog_initialized');
 
@@ -344,3 +344,87 @@ export async function saveSettingsToFirestore(settings: Partial<SiteSettings>): 
     }
   }
 }
+
+/**
+ * Subscribe to real-time Coupons updates from Firestore
+ */
+export function subscribeToCoupons(
+  onUpdate: (coupons: Coupon[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const colRef = collection(db, 'coupons');
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const couponsList: Coupon[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as Coupon;
+        couponsList.push({ ...data, id: docSnap.id });
+      });
+      couponsList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      onUpdate(couponsList);
+    },
+    (error) => {
+      console.warn('Firestore coupons onSnapshot notice:', error?.message);
+      if (onError) onError(error);
+    }
+  );
+}
+
+/**
+ * Save a coupon to Firestore with clean payload
+ */
+export async function saveCouponToFirestore(coupon: Partial<Coupon>): Promise<Coupon> {
+  const id = coupon.id || `coup_${Date.now()}`;
+  const now = new Date().toISOString();
+  const cleanCoupon: Coupon = {
+    id,
+    code: (coupon.code || 'COUPON').trim().toUpperCase(),
+    description: coupon.description || '',
+    discountType: coupon.discountType === 'percentage' ? 'percentage' : 'fixed',
+    discountValue: Math.max(0, Number(coupon.discountValue) || 0),
+    minOrderAmount: Math.max(0, Number(coupon.minOrderAmount) || 0),
+    maxDiscount: coupon.maxDiscount ? Math.max(0, Number(coupon.maxDiscount)) : null,
+    expiryDate: coupon.expiryDate || null,
+    usageLimit: coupon.usageLimit ? Math.max(0, Number(coupon.usageLimit)) : null,
+    perCustomerLimit: coupon.perCustomerLimit ? Math.max(1, Number(coupon.perCustomerLimit)) : 1,
+    usedCount: typeof coupon.usedCount === 'number' ? coupon.usedCount : 0,
+    applicabilityType: coupon.applicabilityType || 'all',
+    applicableCategoryIds: Array.isArray(coupon.applicableCategoryIds) ? coupon.applicableCategoryIds : [],
+    applicableItemIds: Array.isArray(coupon.applicableItemIds) ? coupon.applicableItemIds : [],
+    isActive: coupon.isActive !== undefined ? Boolean(coupon.isActive) : true,
+    createdAt: coupon.createdAt || now,
+    updatedAt: now,
+  };
+
+  const cleanPayload = sanitizeOrderForFirestore(cleanCoupon) as Coupon;
+  const docRef = doc(db, 'coupons', id);
+  try {
+    await setDoc(docRef, cleanPayload);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied' || err?.message?.includes('PERMISSION_DENIED')) {
+      console.warn('[Firestore] Unauthenticated SDK write blocked by security rules for coupon:', id);
+    } else {
+      throw err;
+    }
+  }
+  return cleanCoupon;
+}
+
+/**
+ * Permanently delete a coupon from Firestore
+ */
+export async function deleteCouponFromFirestore(id: string): Promise<void> {
+  if (!id) throw new Error('Coupon ID is required for deletion');
+  const docRef = doc(db, 'coupons', id);
+  try {
+    await deleteDoc(docRef);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied' || err?.message?.includes('PERMISSION_DENIED')) {
+      console.warn('[Firestore] Unauthenticated SDK delete blocked by security rules for coupon:', id);
+    } else {
+      throw err;
+    }
+  }
+}
+
