@@ -672,23 +672,18 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
 
       const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
       const discountAmount = cartDiscount.discountTotal;
+      const foodSubtotal = subtotal + addonsTotal;
 
-      // Delivery charge calculation
+      // Delivery charge calculation rule:
+      // Subtotal >= ₹400 => ₹0 (FREE DELIVERY)
+      // Subtotal < ₹400 => ₹20
       let deliveryCharge = 0;
       const orderType = customer.orderType || 'delivery';
       if (orderType === 'delivery') {
-        const configuredFee = data.settings.deliveryCharge ?? 0;
-        const freeThreshold = data.settings.freeDeliveryThreshold ?? 0;
-        if (configuredFee > 0) {
-          if (freeThreshold > 0 && subtotal >= freeThreshold) {
-            deliveryCharge = 0;
-          } else {
-            deliveryCharge = configuredFee;
-          }
-        }
+        deliveryCharge = foodSubtotal >= 400 ? 0 : 20;
       }
 
-      const finalTotal = Math.max(0, subtotal + addonsTotal - discountAmount + deliveryCharge);
+      const finalTotal = Math.max(0, foodSubtotal - discountAmount + deliveryCharge);
       const orderRef = 'OB-HD-' + Date.now().toString().slice(-6);
 
       const compositeAddress = [
@@ -807,10 +802,12 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       });
 
       msg += `PAYMENT SUMMARY\n`;
-      msg += `Subtotal: ₹${subtotal + addonsTotal}\n`;
-      msg += `Discount: ₹${discountAmount}\n`;
-      msg += `Delivery Charge: ₹${deliveryCharge}\n`;
-      msg += `FINAL TOTAL: ₹${finalTotal}\n\n`;
+      msg += `Food Subtotal: ₹${foodSubtotal}\n`;
+      if (discountAmount > 0) {
+        msg += `Discount: -₹${discountAmount}\n`;
+      }
+      msg += `Delivery Charge: ${deliveryCharge === 0 ? '₹0 (FREE DELIVERY)' : `₹${deliveryCharge}`}\n`;
+      msg += `FINAL PAYABLE AMOUNT: ₹${finalTotal}\n\n`;
 
       msg += `PAYMENT METHOD: PAY ON DELIVERY\n`;
       msg += `Payment Status: UNPAID\n`;

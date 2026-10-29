@@ -378,12 +378,12 @@ export function AdminSettings() {
                 <input
                   type="number"
                   min="0"
-                  value={formData.deliveryCharge ?? 0}
+                  value={formData.deliveryCharge ?? 20}
                   onChange={e => handleChange('deliveryCharge', Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="0 (Free Delivery)"
+                  placeholder="20"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                 />
-                <span className="text-[10px] text-stone-500 mt-0.5 block">0 = Free delivery in Motihari town</span>
+                <span className="text-[10px] text-stone-500 mt-0.5 block">Standard fee for orders under ₹400 (default: ₹20)</span>
               </div>
 
               <div>
@@ -393,12 +393,12 @@ export function AdminSettings() {
                 <input
                   type="number"
                   min="0"
-                  value={formData.freeDeliveryThreshold ?? 0}
+                  value={formData.freeDeliveryThreshold ?? 400}
                   onChange={e => handleChange('freeDeliveryThreshold', Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="Order amount for free delivery"
+                  placeholder="400"
                   className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
                 />
-                <span className="text-[10px] text-stone-500 mt-0.5 block">Orders above this get free delivery</span>
+                <span className="text-[10px] text-stone-500 mt-0.5 block">Orders ₹400 or higher get FREE DELIVERY (default: ₹400)</span>
               </div>
 
               <div>

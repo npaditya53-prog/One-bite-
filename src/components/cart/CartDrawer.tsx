@@ -76,16 +76,11 @@ export function CartDrawer() {
 
   if (!isCartOpen) return null;
 
-  // Delivery charge calculation
-  const configuredDeliveryFee = settings.deliveryCharge ?? 0;
-  const freeThreshold = settings.freeDeliveryThreshold ?? 0;
-  const deliveryCharge =
-    configuredDeliveryFee > 0
-      ? freeThreshold > 0 && cartTotal >= freeThreshold
-        ? 0
-        : configuredDeliveryFee
-      : 0;
-
+  // Delivery charge calculation rule:
+  // Order total (food subtotal) >= ₹400 => FREE DELIVERY (₹0)
+  // Order total < ₹400 => ₹20
+  const foodSubtotal = cartTotal;
+  const deliveryCharge = foodSubtotal >= 400 ? 0 : 20;
   const finalPayableTotal = Math.max(0, cartDiscount.finalTotal + deliveryCharge);
 
   // Validate form fields
@@ -495,11 +490,24 @@ export function CartDrawer() {
                       <span>-₹{cartDiscount.discountTotal}</span>
                     </div>
                   )}
-                  <div className="flex justify-between">
+                  {/* Free delivery prompt banner */}
+                  {foodSubtotal > 0 && foodSubtotal < 400 ? (
+                    <div className="bg-amber-50/90 border border-amber-200/90 rounded-xl px-3 py-2 text-xs text-amber-900 font-medium flex items-center justify-between">
+                      <span>Add <span className="font-bold text-amber-700">₹{(400 - foodSubtotal).toFixed(0)}</span> more for <span className="font-bold text-emerald-700">FREE DELIVERY</span></span>
+                      <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md shrink-0">Threshold ₹400</span>
+                    </div>
+                  ) : foodSubtotal >= 400 ? (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs text-emerald-900 font-medium flex items-center justify-between">
+                      <span className="font-bold text-emerald-800">🎉 You unlocked FREE DELIVERY!</span>
+                      <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-md shrink-0">₹0 Delivery Fee</span>
+                    </div>
+                  ) : null}
+
+                  <div className="flex justify-between items-center">
                     <span>Delivery Charge</span>
                     <span className="font-semibold text-stone-900">
                       {deliveryCharge === 0 ? (
-                        <span className="text-emerald-700 font-bold">FREE in Motihari</span>
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full text-[11px] border border-emerald-200">FREE DELIVERY</span>
                       ) : (
                         `₹${deliveryCharge}`
                       )}
@@ -837,11 +845,11 @@ export function CartDrawer() {
                     <span>-₹{cartDiscount.discountTotal}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span>Delivery Charge</span>
                   <span className="font-semibold text-stone-900">
                     {deliveryCharge === 0 ? (
-                      <span className="text-emerald-700 font-bold">FREE</span>
+                      <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full text-[11px] border border-emerald-200">FREE DELIVERY</span>
                     ) : (
                       `₹${deliveryCharge}`
                     )}

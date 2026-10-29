@@ -350,10 +350,10 @@ export function AdminOrders() {
           customerPhone: cleanPhone,
           deliveryAddress: manualForm.deliveryAddress.trim() || 'Balua Chowk, Motihari',
           landmark: manualForm.landmark.trim(),
-          totalAmount: parsedAmount,
           subtotal: parsedAmount,
           addonsTotal: 0,
-          deliveryCharge: 0,
+          deliveryCharge: parsedAmount >= 400 ? 0 : 20,
+          totalAmount: parsedAmount + (parsedAmount >= 400 ? 0 : 20),
           deliveryInstructions: manualForm.deliveryInstructions.trim(),
           items,
         },
@@ -871,7 +871,7 @@ export function AdminOrders() {
                       ) : null}
                       <div className="flex justify-between">
                         <span>Delivery Fee:</span>
-                        <span>{order.deliveryCharge ? `₹${order.deliveryCharge}` : 'FREE'}</span>
+                        <span>{order.deliveryCharge && order.deliveryCharge > 0 ? `₹${order.deliveryCharge}` : 'FREE DELIVERY'}</span>
                       </div>
                       <div className="flex justify-between text-xs font-black text-stone-950 pt-1.5 border-t border-stone-200">
                         <span>Total Payable:</span>

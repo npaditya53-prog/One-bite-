@@ -348,12 +348,16 @@ export function OrderTrackingModal({
                   <span>-₹{order.discountAmount}</span>
                 </div>
               ) : null}
-              {order.deliveryCharge ? (
-                <div className="flex justify-between text-stone-600">
-                  <span>Delivery Charge:</span>
-                  <span>₹{order.deliveryCharge}</span>
-                </div>
-              ) : null}
+              <div className="flex justify-between text-stone-600">
+                <span>Delivery Charge:</span>
+                <span>
+                  {order.deliveryCharge && order.deliveryCharge > 0 ? (
+                    `₹${order.deliveryCharge}`
+                  ) : (
+                    <span className="text-emerald-700 font-bold">FREE DELIVERY</span>
+                  )}
+                </span>
+              </div>
               <div className="flex justify-between text-sm font-black text-stone-900 pt-1.5 border-t border-stone-200">
                 <span>Total Amount:</span>
                 <span className="text-amber-700">₹{order.totalAmount}</span>

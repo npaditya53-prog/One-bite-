@@ -1543,21 +1543,16 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     }
   }
 
-  // Delivery fee calculation
+  // Delivery fee calculation rule:
+  // Food subtotal (subtotal + addons) >= 400 => ₹0 (FREE DELIVERY)
+  // Food subtotal < 400 => ₹20
+  const foodSubtotal = authoritativeSubtotal + authoritativeAddonsTotal;
   let deliveryCharge = 0;
   if (orderType === 'delivery') {
-    const configuredFee = database.settings.deliveryCharge ?? 0;
-    const freeThreshold = database.settings.freeDeliveryThreshold ?? 0;
-    if (configuredFee > 0) {
-      if (freeThreshold > 0 && authoritativeSubtotal >= freeThreshold) {
-        deliveryCharge = 0;
-      } else {
-        deliveryCharge = configuredFee;
-      }
-    }
+    deliveryCharge = foodSubtotal >= 400 ? 0 : 20;
   }
 
-  const authoritativeTotal = Math.max(0, authoritativeSubtotal + authoritativeAddonsTotal - authoritativeDiscount + deliveryCharge);
+  const authoritativeTotal = Math.max(0, foodSubtotal - authoritativeDiscount + deliveryCharge);
 
   // 3. Deduplication Guard: Check if identical order was submitted within last 30s
   const dedupKey = `${cleanPhone}:${validatedItems.length}:${Math.round(authoritativeTotal)}`;
