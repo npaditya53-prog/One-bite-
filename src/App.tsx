@@ -25,6 +25,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
 import { AlertCircle } from 'lucide-react';
 import { initGlobalButtonSound } from './utils/sound.ts';
 import { OrderSuccessModal } from './components/common/OrderSuccessModal.tsx';
+import { OfflineIndicator } from './components/common/OfflineIndicator.tsx';
 import { deliveryAuthStorage } from './services/api.ts';
 
 const AdminLayout = React.lazy(() =>
@@ -485,6 +486,9 @@ function MainContent() {
         isOpen={isClosedModalOpen}
         onClose={() => setIsClosedModalOpen(false)}
       />
+
+      {/* Connectivity Status Indicator */}
+      <OfflineIndicator />
     </div>
   );
 }
