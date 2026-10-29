@@ -1711,6 +1711,104 @@ app.put('/api/orders/:id/payment', requireAdmin, (req, res) => {
   res.json(order);
 });
 
+// 9.6 WhatsApp Cloud API & Fallback Messaging Endpoints
+app.get('/api/whatsapp/status', (_req: Request, res: Response) => {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  const configured = Boolean(token && phoneId);
+  const targetPhone = process.env.WHATSAPP_RECIPIENT_NUMBER || database.settings.phone || '918210442538';
+  const cleanTarget = targetPhone.replace(/[^0-9]/g, '');
+
+  res.json({
+    configured,
+    provider: configured ? 'Meta WhatsApp Cloud API v18.0' : 'wa.me Direct Link Fallback',
+    phoneId: phoneId ? `${phoneId.slice(0, 4)}...${phoneId.slice(-4)}` : null,
+    targetPhone: cleanTarget,
+    statusText: configured
+      ? 'WhatsApp Cloud API Active (Automated Server-Side Messaging)'
+      : 'WhatsApp Token/Phone ID Not Configured (Using wa.me direct fallback links)',
+    setupInstructions: configured
+      ? 'Meta Cloud API is fully authorized for automated notifications.'
+      : 'To enable automated background WhatsApp notifications without manual clicks, add WHATSAPP_TOKEN and WHATSAPP_PHONE_ID to your environment variables.',
+  });
+});
+
+app.post('/api/whatsapp/send-order', async (req: Request, res: Response) => {
+  try {
+    const { orderId, orderData } = req.body || {};
+    const order = orderData || (database.orders || []).find((o: any) => o.id === orderId);
+
+    if (!order) {
+      return res.status(400).json({ error: 'Order details not found' });
+    }
+
+    const targetPhone = process.env.WHATSAPP_RECIPIENT_NUMBER || database.settings.phone || '918210442538';
+    const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+
+    const formattedItems = (order.items || [])
+      .map((i: any) => `• ${i.name} x${i.quantity} (₹${(i.unitPrice || 0) * i.quantity})`)
+      .join('\n');
+
+    const formattedMessage = `*NEW ORDER ALERT - ONE BITE MOTIHARI* 🍕\n\n` +
+      `*Order ID:* #${order.id}\n` +
+      `*Customer Name:* ${order.customerName}\n` +
+      `*Phone Number:* ${order.customerPhone}\n` +
+      `*Order Type:* ${order.orderType === 'delivery' ? 'Home Delivery' : 'Dine-In / Takeaway'}\n` +
+      (order.deliveryAddress ? `*Delivery Address:* ${order.deliveryAddress}\n` : '') +
+      `*Total Amount:* ₹${order.totalAmount} (${order.paymentMethod === 'pay_on_delivery' ? 'Pay on Delivery' : 'Paid'})\n\n` +
+      `*Items Ordered:*\n${formattedItems}\n\n` +
+      `*Status:* ${order.status || 'Order Placed'}\n` +
+      `*Placed At:* ${order.createdAt && !isNaN(new Date(order.createdAt).getTime()) ? new Date(order.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneId = process.env.WHATSAPP_PHONE_ID;
+
+    if (token && phoneId) {
+      const metaRes = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: cleanPhone,
+          type: 'text',
+          text: { body: formattedMessage },
+        }),
+      });
+
+      if (metaRes.ok) {
+        const json = await metaRes.json();
+        return res.json({
+          success: true,
+          method: 'cloud_api',
+          messageId: json?.messages?.[0]?.id,
+          note: 'Successfully dispatched via WhatsApp Cloud API v18.0',
+        });
+      } else {
+        const errText = await metaRes.text();
+        console.warn('Meta WhatsApp API call failed, falling back to wa.me link:', errText);
+      }
+    }
+
+    const encodedText = encodeURIComponent(formattedMessage);
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
+
+    return res.json({
+      success: true,
+      method: 'fallback_link',
+      waUrl,
+      formattedText: formattedMessage,
+      targetPhone: cleanPhone,
+      note: 'WhatsApp Cloud API token/phone ID not set or request failed. Direct wa.me link created.',
+    });
+  } catch (err: any) {
+    console.error('WhatsApp dispatch error:', err);
+    return res.status(500).json({ error: 'Failed to process WhatsApp notification' });
+  }
+});
+
 // 10. Image Upload Endpoint - Restricted to safe image MIME types (JPEG, PNG, WebP)
 app.post('/api/upload', requireAdmin, (req, res) => {
   try {

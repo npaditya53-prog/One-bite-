@@ -16,6 +16,22 @@ export function AdminSettings() {
   const [isUploadingAbout, setIsUploadingAbout] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
+  const [waStatus, setWaStatus] = useState<{
+    configured: boolean;
+    provider: string;
+    phoneId: string | null;
+    targetPhone: string;
+    statusText: string;
+    setupInstructions: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    fetch('/api/whatsapp/status')
+      .then(r => r.json())
+      .then(d => setWaStatus(d))
+      .catch(() => setWaStatus(null));
+  }, []);
+
   const handleChange = (field: keyof SiteSettings, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -323,6 +339,30 @@ export function AdminSettings() {
                 placeholder="Direct WhatsApp & Takeaway"
                 className="w-full px-3.5 py-2 border border-stone-200 rounded-xl text-sm focus:outline-none"
               />
+            </div>
+          </div>
+
+          {/* WhatsApp API Provider Status Card */}
+          <div className="pt-3 border-t border-stone-100">
+            <span className="text-xs font-bold text-stone-900 block mb-2">
+              WhatsApp Integration & Order Notification Channel
+            </span>
+            <div className={`p-4 rounded-xl border text-xs space-y-2 ${waStatus?.configured ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${waStatus?.configured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  Provider: {waStatus?.provider || 'Checking...'}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/80 border">
+                  Target: +{waStatus?.targetPhone || '918210442538'}
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                {waStatus?.statusText}
+              </p>
+              <p className="text-[10px] opacity-80 border-t border-black/5 pt-1.5">
+                💡 {waStatus?.setupInstructions}
+              </p>
             </div>
           </div>
 
