@@ -1,30 +1,24 @@
 import { DatabaseSchema, SiteSettings, Category, MenuItem, GalleryItem, ReviewItem, OfferItem, Coupon, BusinessDayHours, CustomerOrder } from '../types/index.ts';
 import { initialData } from '../data/initialData.ts';
 
-const TOKEN_KEY = 'onebite_admin_token';
-const DELIVERY_TOKEN_KEY = 'onebite_delivery_token';
-
 export const authStorage = {
-  getToken: () => localStorage.getItem(TOKEN_KEY) || '',
-  setToken: (token: string) => localStorage.setItem(TOKEN_KEY, token),
-  clearToken: () => localStorage.removeItem(TOKEN_KEY),
+  getToken: () => '',
+  setToken: (_token: string) => {},
+  clearToken: () => {},
 };
 
 export const deliveryAuthStorage = {
-  getToken: () => localStorage.getItem(DELIVERY_TOKEN_KEY) || '',
-  setToken: (token: string) => localStorage.setItem(DELIVERY_TOKEN_KEY, token),
-  clearToken: () => localStorage.removeItem(DELIVERY_TOKEN_KEY),
+  getToken: () => '',
+  setToken: (_token: string) => {},
+  clearToken: () => {},
 };
 
 const getAuthHeaders = (): Record<string, string> => {
-  const token = authStorage.getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return {};
 };
 
 const getDeliveryAuthHeaders = (): Record<string, string> => {
-  const deliveryToken = deliveryAuthStorage.getToken();
-  const token = deliveryToken || authStorage.getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return {};
 };
 
 export const api = {
@@ -39,7 +33,7 @@ export const api = {
     }
   },
 
-  async login(email: string, pass: string): Promise<{ token: string; user: { email?: string; phone?: string; role: string } }> {
+  async login(email: string, pass: string): Promise<{ success: boolean; user: { email?: string; phone?: string; role: string } }> {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,7 +44,6 @@ export const api = {
       throw new Error(err.error || 'Invalid credentials');
     }
     const data = await res.json();
-    authStorage.setToken(data.token);
     return data;
   },
 
@@ -67,7 +60,7 @@ export const api = {
     return data;
   },
 
-  async verifyLoginLink(token: string): Promise<{ success: boolean; token: string; role: 'admin' | 'delivery'; user: any }> {
+  async verifyLoginLink(token: string): Promise<{ success: boolean; role: 'admin' | 'delivery'; user: any }> {
     const res = await fetch('/api/auth/verify-login-link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,11 +69,6 @@ export const api = {
     const data = await res.json().catch(() => ({ error: 'Invalid or expired login link' }));
     if (!res.ok) {
       throw new Error(data.error || 'Invalid or expired login link');
-    }
-    if (data.role === 'delivery') {
-      deliveryAuthStorage.setToken(data.token);
-    } else {
-      authStorage.setToken(data.token);
     }
     return data;
   },
@@ -111,7 +99,7 @@ export const api = {
     return await res.json();
   },
 
-  async verifyOtp(phone: string, otp: string): Promise<{ token: string; user: { phone: string; role: string } }> {
+  async verifyOtp(phone: string, otp: string): Promise<{ success: boolean; user: { phone: string; role: string } }> {
     const res = await fetch('/api/auth/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -122,11 +110,10 @@ export const api = {
       throw new Error(err.error || 'Invalid or expired OTP');
     }
     const data = await res.json();
-    authStorage.setToken(data.token);
     return data;
   },
 
-  async loginPhone(phone: string, firebaseUid?: string): Promise<{ token: string; user: { phone: string; role: string } }> {
+  async loginPhone(phone: string, firebaseUid?: string): Promise<{ success: boolean; user: { phone: string; role: string } }> {
     const res = await fetch('/api/auth/login-phone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -137,11 +124,10 @@ export const api = {
       throw new Error(err.error || 'Unauthorized admin mobile number');
     }
     const data = await res.json();
-    authStorage.setToken(data.token);
     return data;
   },
 
-  async loginFirebaseUser(email?: string, phone?: string): Promise<{ token: string; user: { identifier: string; role: string } }> {
+  async loginFirebaseUser(email?: string, phone?: string): Promise<{ success: boolean; user: { identifier: string; role: string } }> {
     const res = await fetch('/api/auth/login-firebase-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -152,7 +138,6 @@ export const api = {
       throw new Error(err.error || 'Access Denied: This account is not an authorized administrator.');
     }
     const data = await res.json();
-    authStorage.setToken(data.token);
     return data;
   },
 
@@ -170,12 +155,8 @@ export const api = {
   },
 
   async checkAuth(): Promise<boolean> {
-    const token = authStorage.getToken();
-    if (!token) return false;
     try {
-      const res = await fetch('/api/auth/me', {
-        headers: getAuthHeaders(),
-      });
+      const res = await fetch('/api/auth/me');
       return res.ok;
     } catch {
       return false;
@@ -672,7 +653,7 @@ export const api = {
   },
 
   // Delivery Boy API Methods
-  async deliveryLogin(identifier: string, pass: string): Promise<{ token: string; user: { identifier: string; role: string } }> {
+  async deliveryLogin(identifier: string, pass: string): Promise<{ success: boolean; user: { identifier: string; role: string } }> {
     const res = await fetch('/api/delivery/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -683,11 +664,10 @@ export const api = {
       throw new Error(err.error || 'Invalid delivery credentials');
     }
     const data = await res.json();
-    deliveryAuthStorage.setToken(data.token);
     return data;
   },
 
-  async loginDeliveryFirebaseUser(email?: string): Promise<{ token: string; user: { identifier: string; role: string } }> {
+  async loginDeliveryFirebaseUser(email?: string): Promise<{ success: boolean; user: { identifier: string; role: string } }> {
     const res = await fetch('/api/delivery/login-firebase-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -698,17 +678,12 @@ export const api = {
       throw new Error(err.error || 'Unauthorized delivery account');
     }
     const data = await res.json();
-    deliveryAuthStorage.setToken(data.token);
     return data;
   },
 
   async checkDeliveryAuth(): Promise<boolean> {
-    const token = deliveryAuthStorage.getToken();
-    if (!token) return false;
     try {
-      const res = await fetch('/api/delivery/check', {
-        headers: getDeliveryAuthHeaders(),
-      });
+      const res = await fetch('/api/delivery/check');
       if (!res.ok) return false;
       const data = await res.json();
       return Boolean(data.authenticated);

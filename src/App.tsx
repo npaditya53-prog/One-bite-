@@ -27,7 +27,6 @@ import { AlertCircle } from 'lucide-react';
 import { initGlobalButtonSound } from './utils/sound.ts';
 import { OrderSuccessModal } from './components/common/OrderSuccessModal.tsx';
 import { OfflineIndicator } from './components/common/OfflineIndicator.tsx';
-import { deliveryAuthStorage } from './services/api.ts';
 
 const AdminLayout = React.lazy(() =>
   import('./components/admin/AdminLayout.tsx').then(m => ({ default: m.AdminLayout }))
@@ -80,12 +79,16 @@ function viewToPath(view: string): string {
   return `/${view}`;
 }
 
+import { PermissionProvider } from './context/PermissionContext.tsx';
+import { PermissionModal } from './components/common/PermissionModal.tsx';
+
 function MainContent() {
   const {
     settings,
     isLoading,
     error,
     isAdmin,
+    isDelivery,
     refreshData,
     celebrationOrder,
     celebrationWhatsappUrl,
@@ -273,9 +276,7 @@ function MainContent() {
       </div>
     );
 
-    const hasDeliveryToken = Boolean(deliveryAuthStorage.getToken());
-
-    if (currentView === 'delivery-dashboard' && hasDeliveryToken) {
+    if (currentView === 'delivery-dashboard' && isDelivery) {
       return (
         <React.Suspense fallback={deliveryFallback}>
           <DeliveryDashboard
@@ -491,6 +492,9 @@ function MainContent() {
 
       {/* Connectivity Status Indicator */}
       <OfflineIndicator />
+
+      {/* Device Permission Modal */}
+      <PermissionModal />
     </div>
   );
 }
@@ -500,7 +504,9 @@ export default function App() {
     <ErrorBoundary>
       <ToastProvider>
         <RestaurantProvider>
-          <MainContent />
+          <PermissionProvider>
+            <MainContent />
+          </PermissionProvider>
         </RestaurantProvider>
       </ToastProvider>
     </ErrorBoundary>

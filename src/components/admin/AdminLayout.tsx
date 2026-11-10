@@ -11,6 +11,7 @@ import { AdminHours } from './AdminHours.tsx';
 import { AdminSettings } from './AdminSettings.tsx';
 import { AdminOrders } from './AdminOrders.tsx';
 import { AdminCoupons } from './AdminCoupons.tsx';
+import { AdminNotifications } from './AdminNotifications.tsx';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -27,6 +28,7 @@ import {
   Menu as MenuIcon,
   X,
   ShieldCheck,
+  Bell,
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -54,6 +56,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
     { id: 'offers', label: 'Special Offers', icon: Tag },
     { id: 'coupons', label: 'Coupon Codes', icon: Ticket },
     { id: 'hours', label: 'Business Hours', icon: Clock },
+    { id: 'notifications', label: 'Push Notifications', icon: Bell },
     { id: 'settings', label: 'Website Settings', icon: Settings },
   ];
 
@@ -171,6 +174,7 @@ export function AdminLayout({ onViewLiveSite }: AdminLayoutProps) {
           {activeTab === 'reviews' && <AdminReviews />}
           {activeTab === 'offers' && <AdminOffers />}
           {activeTab === 'coupons' && <AdminCoupons />}
+          {activeTab === 'notifications' && <AdminNotifications />}
           {activeTab === 'hours' && <AdminHours />}
           {activeTab === 'settings' && <AdminSettings />}
         </main>

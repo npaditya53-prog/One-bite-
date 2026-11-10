@@ -1,9 +1,11 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
-import { Star, MessageSquare, ExternalLink, Quote } from 'lucide-react';
+import { Star, MessageSquare, ExternalLink, Quote, PenSquare } from 'lucide-react';
+import { ReviewFormModal } from './ReviewFormModal.tsx';
 
 export function ReviewsSection() {
   const { reviews, settings } = useRestaurant();
+  const [isReviewModalOpen, setIsReviewModalOpen] = React.useState(false);
 
   const featuredReviews = reviews.filter(r => r.featured);
   const displayReviews = featuredReviews.length > 0 ? featuredReviews : reviews;
@@ -26,17 +28,27 @@ export function ReviewsSection() {
             </p>
           </div>
 
-          {settings.mapsUrl && (
-            <a
-              href={settings.mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-amber-700 hover:text-amber-800 transition-colors self-start sm:self-auto"
+          <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+            <button
+              onClick={() => setIsReviewModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs sm:text-sm font-bold border border-stone-800 transition-all cursor-pointer shadow-sm group"
             >
-              <span>View Google Reviews</span>
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          )}
+              <PenSquare className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+              <span>Write a Review</span>
+            </button>
+
+            {settings.mapsUrl && (
+              <a
+                href={settings.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold text-amber-700 hover:text-amber-800 transition-colors"
+              >
+                <span>Google Reviews</span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -83,6 +95,15 @@ export function ReviewsSection() {
           ))}
         </div>
       </div>
+
+      <ReviewFormModal 
+        isOpen={isReviewModalOpen} 
+        onClose={() => setIsReviewModalOpen(false)}
+        onSubmit={(review) => {
+          console.log('Review Submitted:', review);
+          // In a real app, this would call an API
+        }}
+      />
     </section>
   );
 }

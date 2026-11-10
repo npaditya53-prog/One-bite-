@@ -7,23 +7,8 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Security Primitives
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
+    // Security Primitives (Read-only for rules)
+    function isSignedIn() { return request.auth != null; }
     function isAdmin() {
       return isSignedIn() && (
         ('email' in request.auth.token && (
@@ -34,7 +19,6 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }
-
     function isDeliveryBoy() {
       return isSignedIn() && (
         ('email' in request.auth.token && (
@@ -42,8 +26,7 @@ service cloud.firestore {
           request.auth.token.email == 'deliveryboy@onebitemotihari.in' ||
           request.auth.token.email == 'yoonekaditya.ai@gmail.com'
         )) ||
-        exists(/databases/$(database)/documents/delivery_boys/$(request.auth.uid)) ||
-        ('email' in request.auth.token && exists(/databases/$(database)/documents/delivery_boys/$(request.auth.token.email)))
+        exists(/databases/$(database)/documents/delivery_boys/$(request.auth.uid))
       );
     }
 
@@ -54,184 +37,39 @@ service cloud.firestore {
 
     // System initialization marker doc
     match /system/{docId} {
-      allow read, write: if true;
-    }
-
-    // Admins Collection
-    match /admins/{adminId} {
-      allow read: if isAdmin();
-      allow write: if isAdmin() && isValidId(adminId);
-    }
-
-    // Site Settings
-    function isValidSetting(data) {
-      return data.restaurantName is string && data.restaurantName.size() <= 150 &&
-             data.phone is string && data.phone.size() <= 30 &&
-             data.whatsapp is string && data.whatsapp.size() <= 30 &&
-             data.address is string && data.address.size() <= 300;
-    }
-
-    match /settings/{settingId} {
       allow read: if true;
-      allow create, update: if isAdmin() && isValidId(settingId) && isValidSetting(incoming());
-      allow delete: if isAdmin();
+      allow write: if false; 
     }
 
-    // Menu Categories
-    function isValidCategory(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 100 &&
-             data.displayOrder is number &&
-             data.active is bool;
-    }
+    // Catalog Collections: Public Read, Server-Only Write (write: if false)
+    match /settings/{settingId} { allow read: if true; allow write: if false; }
+    match /categories/{categoryId} { allow read: if true; allow write: if false; }
+    match /menuItems/{menuItemId} { allow read: if true; allow write: if false; }
+    match /gallery/{galleryId} { allow read: if true; allow write: if false; }
+    match /offers/{offerId} { allow read: if true; allow write: if false; }
+    match /coupons/{couponId} { allow read: if true; allow write: if false; }
+    match /businessHours/{dayId} { allow read: if true; allow write: if false; }
+    match /reviews/{reviewId} { allow read: if true; allow write: if false; }
 
-    match /categories/{categoryId} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
-      allow update: if isAdmin() && isValidId(categoryId) && isValidCategory(incoming());
-      allow delete: if isAdmin() && isValidId(categoryId);
-    }
-
-    // Menu Items
-    function isValidMenuItem(data) {
-      return data.categoryId is string && data.categoryId.size() <= 128 &&
-             data.name is string && data.name.size() > 0 && data.name.size() <= 150 &&
-             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 150 &&
-             data.foodType is string && (data.foodType == 'veg' || data.foodType == 'non_veg') &&
-             data.available is bool;
-    }
-
-    match /menuItems/{menuItemId} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidId(menuItemId) && isValidMenuItem(incoming());
-      allow update: if isAdmin() && isValidId(menuItemId) && isValidMenuItem(incoming());
-      allow delete: if isAdmin() && isValidId(menuItemId);
-    }
-
-    // Orders
-    function isValidOrder(data) {
-      return data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100 &&
-             data.customerPhone is string && data.customerPhone.size() >= 10 && data.customerPhone.size() <= 30 &&
-             data.orderType is string && (data.orderType == 'takeaway' || data.orderType == 'delivery' || data.orderType == 'dine_in') &&
-             data.totalAmount is number && data.totalAmount >= 0 &&
-             data.status is string && (
-               data.status == 'pending' ||
-               data.status == 'confirmed' ||
-               data.status == 'preparing' ||
-               data.status == 'packed' ||
-               data.status == 'out_for_delivery' ||
-               data.status == 'delivered' ||
-               data.status == 'completed' ||
-               data.status == 'cancelled'
-             ) &&
-             data.createdAt is string && data.createdAt.size() <= 100;
-    }
-
-    // Operating Hours Validation: 11:00 AM to 8:45 PM IST (Asia/Kolkata)
-    // IST is UTC + 5 hours 30 mins (+330 minutes)
-    // 11:00 AM IST = 05:30 UTC = 5 * 60 + 30 = 330 minutes from midnight UTC
-    // 8:45 PM IST (20:45 IST) = 15:15 UTC = 15 * 60 + 15 = 915 minutes from midnight UTC
-    // request.time.hours() and request.time.minutes() are always evaluated in UTC
-    function isOperatingHours() {
-      return (request.time.hours() * 60 + request.time.minutes() >= 330) &&
-             (request.time.hours() * 60 + request.time.minutes() < 915);
-    }
-
+    // Orders: Private Read (Customer/Admin/Delivery), Server-Only Write
     match /orders/{orderId} {
-      allow get: if isAdmin() || isDeliveryBoy() || (isSignedIn() && resource.data.customerUid == request.auth.uid) || isValidId(orderId);
+      allow get: if isAdmin() || isDeliveryBoy() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
       allow list: if isAdmin() || isDeliveryBoy() || (isSignedIn() && resource.data.customerUid == request.auth.uid);
-      allow create: if isValidId(orderId) &&
-                       isValidOrder(incoming()) &&
-                       (isAdmin() || isOperatingHours()) &&
-                       (incoming().status == 'pending' || (isAdmin() && incoming().status == 'confirmed')) &&
-                       (!('customerUid' in incoming()) || !isSignedIn() || incoming().customerUid == request.auth.uid);
-      allow update: if (isAdmin() && isValidId(orderId) && isValidOrder(incoming()) && incoming().createdAt == existing().createdAt) ||
-                     (isDeliveryBoy() && isValidId(orderId) && isValidOrder(incoming()) &&
-                      existing().status != 'cancelled' &&
-                      (incoming().status == 'delivered' || incoming().status == 'out_for_delivery') &&
-                      incoming().totalAmount == existing().totalAmount &&
-                      incoming().createdAt == existing().createdAt &&
-                      incoming().customerPhone == existing().customerPhone);
-      allow delete: if isAdmin() && isValidId(orderId);
+      allow write: if false;
     }
 
-    // Delivery Boys collection
+    // Internal Metadata
+    match /admins/{adminId} { allow read: if isAdmin(); allow write: if false; }
     match /delivery_boys/{boyId} {
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == boyId);
-      allow write: if isAdmin() && isValidId(boyId);
+      allow write: if false;
     }
 
-    // Gallery
-    function isValidGallery(data) {
-      return data.imageUrl is string && data.imageUrl.size() <= 1000 &&
-             data.category is string && data.category.size() <= 50 &&
-             data.caption is string && data.caption.size() <= 300 &&
-             data.displayOrder is number;
-    }
-
-    match /gallery/{galleryId} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidId(galleryId) && isValidGallery(incoming());
-      allow update: if isAdmin() && isValidId(galleryId) && isValidGallery(incoming());
-      allow delete: if isAdmin() && isValidId(galleryId);
-    }
-
-    // Reviews
-    function isValidReview(data) {
-      return data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 100 &&
-             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
-             data.reviewText is string && data.reviewText.size() > 0 && data.reviewText.size() <= 1000;
-    }
-
-    match /reviews/{reviewId} {
-      allow read: if true;
-      allow create: if isValidId(reviewId) && isValidReview(incoming());
-      allow update: if isAdmin() && isValidId(reviewId) && isValidReview(incoming());
-      allow delete: if isAdmin() && isValidId(reviewId);
-    }
-
-    // Offers
-    function isValidOffer(data) {
-      return data.title is string && data.title.size() > 0 && data.title.size() <= 150 &&
-             data.description is string && data.description.size() <= 500 &&
-             data.discount is string && data.discount.size() <= 100 &&
-             data.active is bool;
-    }
-
-    match /offers/{offerId} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidId(offerId) && isValidOffer(incoming());
-      allow update: if isAdmin() && isValidId(offerId) && isValidOffer(incoming());
-      allow delete: if isAdmin() && isValidId(offerId);
-    }
-
-    // Coupons
-    function isValidCoupon(data) {
-      return data.code is string && data.code.size() > 0 && data.code.size() <= 100 &&
-             data.discountType is string && (data.discountType == 'percentage' || data.discountType == 'fixed') &&
-             data.discountValue is number && data.discountValue >= 0 &&
-             data.minOrderAmount is number && data.minOrderAmount >= 0 &&
-             data.isActive is bool;
-    }
-
-    match /coupons/{couponId} {
-      allow read: if true;
-      allow create: if isAdmin() && isValidId(couponId) && isValidCoupon(incoming());
-      allow update: if (isAdmin() && isValidId(couponId) && isValidCoupon(incoming())) ||
-                     (isValidId(couponId) && isValidCoupon(incoming()) && incoming().code == existing().code && incoming().usedCount == existing().usedCount + 1);
-      allow delete: if isAdmin() && isValidId(couponId);
-    }
-
-    // Business Hours
-    function isValidBusinessHour(data) {
-      return data.day is string && data.day.size() <= 50 &&
-             data.isClosed is bool;
-    }
-
-    match /businessHours/{dayId} {
-      allow read: if true;
-      allow create, update: if isAdmin() && isValidId(dayId) && isValidBusinessHour(incoming());
-      allow delete: if isAdmin() && isValidId(dayId);
+    // FCM Device Subscriptions: Admin Read, Server-Only Write
+    match /deviceSubscriptions/{tokenId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow write: if false;
     }
   }
 }
+

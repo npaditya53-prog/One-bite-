@@ -4,8 +4,6 @@ import {
   db,
   collection,
   onSnapshot,
-  markOrderDeliveredInFirestore,
-  markOrderOutForDeliveryInFirestore,
   signOutUser,
 } from '../../services/firebase.ts';
 import { CustomerOrder } from '../../types/index.ts';
@@ -144,12 +142,8 @@ export const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({
     try {
       const startedAt = new Date().toISOString();
 
-      // 1. Update in Firebase Firestore for immediate real-time sync with Admin panel
-      try {
-        await markOrderOutForDeliveryInFirestore(order.id, startedAt);
-      } catch (fsErr: any) {
-        console.warn('Firestore out-for-delivery write note:', fsErr?.message);
-      }
+      // Firestore synchronization is handled by the server API
+
 
       // 2. Update via server backend authoritative endpoint
       const updatedOrder = await api.startOrderDelivery(order.id);
@@ -187,15 +181,8 @@ export const DeliveryDashboard: React.FC<DeliveryDashboardProps> = ({
       const deliveredTimestamp = new Date().toISOString();
       const identifier = deliveryIdentifier || 'delivery@onebitemotihari.in';
 
-      // 1. Update in Firebase Firestore for immediate real-time sync with Admin panel
-      try {
-        await markOrderDeliveredInFirestore(order.id, {
-          deliveredBy: identifier,
-          deliveredAt: deliveredTimestamp,
-        });
-      } catch (fsErr: any) {
-        console.warn('Firestore delivery write note:', fsErr?.message);
-      }
+      // Firestore synchronization is handled by the server API
+
 
       // 2. Update via server backend authoritative endpoint
       const updatedOrder = await api.confirmOrderDelivered(order.id);

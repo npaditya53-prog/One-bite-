@@ -22,15 +22,12 @@ import {
   getDocFromServer,
   collection,
   getDocs,
-  setDoc,
-  deleteDoc,
   onSnapshot,
   query,
   orderBy,
   where,
-  updateDoc,
-  runTransaction
 } from 'firebase/firestore';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { isRestaurantOpen } from '../utils/operatingHours.ts';
 import { OrderStatus, StatusHistoryItem } from '../types/index.ts';
@@ -41,6 +38,8 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // CRITICAL: Must use firestoreDatabaseId
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
+
 try {
   auth.useDeviceLanguage();
 } catch {}
@@ -313,267 +312,9 @@ export function sanitizeOrderForFirestore(order: Record<string, any>): Record<st
   return clean;
 }
 
-/**
- * Persist an order to Firebase Firestore (operating hours strictly validated)
- */
-export async function saveOrderToFirestore(order: any, bypassHoursCheck = false): Promise<void> {
-  if (!bypassHoursCheck && !isRestaurantOpen()) {
-    throw new Error(
-      'Restaurant Currently Closed: One Bite accepts orders only during operating hours (11:00 AM to 8:45 PM IST).'
-    );
-  }
-  const cleanOrder = sanitizeOrderForFirestore(order);
-  const orderRef = doc(db, 'orders', String(order.id));
-  await setDoc(orderRef, cleanOrder);
-}
+// Client-side Firestore write functions (saveOrderToFirestore, updateOrderStatusInFirestore, etc.)
+// have been removed to enforce server-side authoritative synchronization and tighten security.
 
-/**
- * Assign an order to delivery boy in Firebase Firestore
- */
-export async function assignOrderInFirestore(
-  orderId: string,
-  assignedData: { assignedAt?: string; assignedBy?: string } = {}
-): Promise<void> {
-  const orderRef = doc(db, 'orders', String(orderId));
-  const updateData: Record<string, any> = {
-    assignedToDeliveryBoy: true,
-    assignedAt: assignedData.assignedAt || new Date().toISOString(),
-    assignedBy: assignedData.assignedBy || 'Admin',
-    deliveryStatus: 'Assigned',
-  };
-  await updateDoc(orderRef, updateData);
-}
-
-/**
- * Unassign an order in Firebase Firestore
- */
-export async function unassignOrderInFirestore(orderId: string): Promise<void> {
-  const orderRef = doc(db, 'orders', String(orderId));
-  await updateDoc(orderRef, {
-    assignedToDeliveryBoy: false,
-    deliveryStatus: 'Pending',
-  });
-}
-
-/**
- * Mark order out for delivery in Firebase Firestore
- */
-export async function markOrderOutForDeliveryInFirestore(
-  orderId: string,
-  startedAt?: string,
-  options: { updatedBy?: string; updaterId?: string } = {}
-): Promise<void> {
-  await updateOrderStatusInFirestore(orderId, 'out_for_delivery', {
-    updatedBy: options.updatedBy || 'Delivery Boy',
-    updaterId: options.updaterId || auth.currentUser?.email || 'delivery',
-    customTimestamp: startedAt,
-    note: 'Order dispatched for delivery',
-  });
-}
-
-/**
- * Confirm order delivered in Firebase Firestore
- */
-export async function markOrderDeliveredInFirestore(
-  orderId: string,
-  deliveryData: { deliveredBy?: string; deliveredAt?: string; updaterId?: string }
-): Promise<void> {
-  await updateOrderStatusInFirestore(orderId, 'delivered', {
-    updatedBy: deliveryData.deliveredBy || 'Delivery Boy',
-    updaterId: deliveryData.updaterId || auth.currentUser?.email || 'delivery',
-    customTimestamp: deliveryData.deliveredAt,
-    paymentStatus: 'paid',
-    note: 'Order delivered successfully to customer',
-  });
-}
-
-/**
- * Query orders belonging to a specific customer UID from Firebase Firestore
- */
-export async function fetchCustomerOrdersFromFirestore(customerUid: string): Promise<any[]> {
-  if (!customerUid) return [];
-  try {
-    const ordersCol = collection(db, 'orders');
-    const q = query(ordersCol, where('customerUid', '==', customerUid));
-    const snap = await getDocs(q);
-    const results: any[] = [];
-    snap.forEach((d) => {
-      results.push({ ...d.data(), id: d.id });
-    });
-    // Sort descending by createdAt
-    results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-    return results;
-  } catch (err) {
-    console.warn('Firestore fetchCustomerOrders error:', err);
-    return [];
-  }
-}
-
-/**
- * Recursively find any fields with 'undefined' value in an object or array for diagnostic reporting.
- */
-export function findUndefinedFields(obj: any, path: string = ''): string[] {
-  const undefinedPaths: string[] = [];
-  if (obj === undefined) {
-    undefinedPaths.push(path || 'root');
-    return undefinedPaths;
-  }
-  if (obj === null || typeof obj !== 'object') {
-    return undefinedPaths;
-  }
-  if (Array.isArray(obj)) {
-    obj.forEach((item, index) => {
-      undefinedPaths.push(...findUndefinedFields(item, `${path}[${index}]`));
-    });
-  } else {
-    for (const key of Object.keys(obj)) {
-      const currentPath = path ? `${path}.${key}` : key;
-      if (obj[key] === undefined) {
-        undefinedPaths.push(currentPath);
-      } else {
-        undefinedPaths.push(...findUndefinedFields(obj[key], currentPath));
-      }
-    }
-  }
-  return undefinedPaths;
-}
-
-/**
- * Update order status and statusHistory atomically in Firebase Firestore using a transaction
- */
-export async function updateOrderStatusInFirestore(
-  orderId: string,
-  newStatus: OrderStatus,
-  options: {
-    note?: string;
-    updatedBy?: string;
-    updaterId?: string;
-    paymentStatus?: 'unpaid' | 'paid';
-    customTimestamp?: string;
-    bypassTransitionCheck?: boolean;
-  } = {}
-): Promise<void> {
-  const orderRef = doc(db, 'orders', String(orderId));
-  const nowIso = options.customTimestamp || new Date().toISOString();
-
-  const statusNameMap: Record<string, string> = {
-    pending: 'Order Placed',
-    confirmed: 'Order Placed',
-    preparing: 'Order Placed',
-    packed: 'Order Packed',
-    out_for_delivery: 'Out for Delivery',
-    delivered: 'Delivered',
-    completed: 'Delivered',
-    cancelled: 'Order Cancelled',
-  };
-
-  const statusName = statusNameMap[newStatus] || newStatus;
-
-  await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(orderRef);
-    if (!snap.exists()) {
-      throw new Error(`Order #${orderId} does not exist in Firebase Firestore.`);
-    }
-
-    const current = snap.data() as any;
-    const currentStatus = current.status;
-
-    // Concurrency / Idempotency check: if status is already the same, do not duplicate
-    if (currentStatus === newStatus) {
-      return;
-    }
-
-    // Validate forward transitions unless bypass flag is specified
-    if (!options.bypassTransitionCheck) {
-      if (newStatus === 'delivered' && currentStatus !== 'out_for_delivery' && currentStatus !== 'delivered') {
-        throw new Error('Invalid transition: Order must be marked "Out for Delivery" before it can be marked "Delivered".');
-      }
-      if (newStatus === 'out_for_delivery' && currentStatus !== 'packed' && currentStatus !== 'out_for_delivery') {
-        if (currentStatus === 'pending' || currentStatus === 'confirmed') {
-          throw new Error('Invalid transition: Order must be marked "Order Packed" before being dispatched Out for Delivery.');
-        }
-      }
-      if (currentStatus === 'delivered' || currentStatus === 'completed') {
-        throw new Error('This order has already been Delivered. Status cannot be modified.');
-      }
-      if (currentStatus === 'cancelled') {
-        throw new Error('This order is cancelled and cannot be updated.');
-      }
-    }
-
-    // Preserve existing status history and append new entry
-    const rawExistingHistory = Array.isArray(current.statusHistory)
-      ? current.statusHistory
-      : [];
-    const existingHistory: StatusHistoryItem[] = rawExistingHistory.map((item: any) =>
-      sanitizeOrderForFirestore(item) as StatusHistoryItem
-    );
-
-    // If existing legacy order had no status history, seed initial placed entry if available
-    if (existingHistory.length === 0 && current.createdAt) {
-      existingHistory.push({
-        status: (currentStatus === 'pending' || currentStatus === 'confirmed' ? currentStatus : 'pending') as OrderStatus,
-        statusName: 'Order Placed',
-        timestamp: current.placedAt || current.createdAt,
-        updatedBy: 'Customer',
-        updaterId: current.customerUid || 'customer',
-        note: 'Order placed by customer',
-      });
-    }
-
-    const newHistoryEntry: Record<string, any> = {
-      status: newStatus,
-      statusName,
-      timestamp: nowIso,
-      updatedBy: options.updatedBy || 'Admin',
-      updaterId: options.updaterId || auth.currentUser?.email || auth.currentUser?.uid || 'admin',
-    };
-
-    if (options.note && options.note.trim()) {
-      newHistoryEntry.note = options.note.trim();
-    }
-
-    const rawUpdatePayload: Record<string, any> = {
-      status: newStatus,
-      updatedAt: nowIso,
-      statusHistory: [...existingHistory, newHistoryEntry],
-    };
-
-    if (options.paymentStatus) {
-      rawUpdatePayload.paymentStatus = options.paymentStatus;
-    }
-
-    if (newStatus === 'packed') {
-      rawUpdatePayload.deliveryStatus = 'Packed';
-      if (!current.packedAt) rawUpdatePayload.packedAt = nowIso;
-    } else if (newStatus === 'out_for_delivery') {
-      rawUpdatePayload.deliveryStatus = 'Out for Delivery';
-      if (!current.outForDeliveryAt) rawUpdatePayload.outForDeliveryAt = nowIso;
-      if (!current.startedDeliveryAt) rawUpdatePayload.startedDeliveryAt = nowIso;
-    } else if (newStatus === 'delivered') {
-      rawUpdatePayload.deliveryStatus = 'Delivered';
-      if (!current.deliveredAt) rawUpdatePayload.deliveredAt = nowIso;
-      rawUpdatePayload.deliveredBy = options.updatedBy || 'One Bite Delivery';
-      if (!current.paymentStatus || current.paymentStatus === 'unpaid') {
-        rawUpdatePayload.paymentStatus = 'paid';
-      }
-    }
-
-    // Strictly sanitize update payload to guarantee zero undefined fields
-    const cleanUpdatePayload = sanitizeOrderForFirestore(rawUpdatePayload);
-
-    // Diagnostic assertion: check for any remaining undefined fields
-    const undefinedFields = findUndefinedFields(cleanUpdatePayload);
-    if (undefinedFields.length > 0) {
-      console.error('[Firestore Transaction Error] Payload contains undefined fields:', undefinedFields);
-      throw new Error(
-        `Transaction.update() payload contains unsupported undefined field(s): ${undefinedFields.join(', ')}`
-      );
-    }
-
-    transaction.update(orderRef, cleanUpdatePayload);
-  });
-}
 
 export async function signOutUser(): Promise<void> {
   await firebaseSignOut(auth);
@@ -624,8 +365,8 @@ export {
   onSnapshot,
   doc,
   collection,
-  setDoc,
-  updateDoc,
+  getToken,
+  onMessage,
 };
 export type { User, ConfirmationResult, ActionCodeSettings };
 

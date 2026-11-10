@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { CustomerOrder } from '../../types/index.ts';
 import { OrderTrackingModal } from './OrderTrackingModal.tsx';
 import { CustomerOnboardingModal } from '../auth/CustomerOnboardingModal.tsx';
+import { usePermissions } from '../../context/PermissionContext.tsx';
 import {
   ShoppingBag,
   Clock,
@@ -17,6 +18,11 @@ import {
   LogIn,
   ChevronDown,
   ChevronUp,
+  ShieldCheck,
+  Bell,
+  Camera,
+  Mic,
+  Settings2,
 } from 'lucide-react';
 
 interface MyOrdersPageProps {
@@ -139,7 +145,7 @@ export function MyOrdersPage({ onBackToMenu, onNavigateHome }: MyOrdersPageProps
         </div>
 
         {/* User Account / Google Sign-in Status Banner */}
-        {firebaseUser ? (
+        {firebaseUser && (
           <div className="p-4 rounded-2xl bg-stone-950/80 border border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-3">
               {firebaseUser.photoURL ? (
@@ -171,7 +177,9 @@ export function MyOrdersPage({ onBackToMenu, onNavigateHome }: MyOrdersPageProps
               Sign Out
             </button>
           </div>
-        ) : (
+        )}
+
+        {!firebaseUser && (
           <div className="p-4 sm:p-5 rounded-2xl bg-amber-950/40 border border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-0.5">
               <span className="font-extrabold text-amber-300 text-sm block">
@@ -191,6 +199,52 @@ export function MyOrdersPage({ onBackToMenu, onNavigateHome }: MyOrdersPageProps
             </button>
           </div>
         )}
+
+        {/* Permissions & Device Integration Settings */}
+        <div className="bg-stone-950/80 border border-stone-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between bg-stone-900/50">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-amber-500/10 rounded-xl">
+                <ShieldCheck className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-white">Permissions & Privacy</h3>
+                <p className="text-[10px] text-stone-400 font-medium uppercase tracking-wider">Manage Device Access</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>LIVE</span>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <PermissionToggle 
+              type="notifications" 
+              label="Push Notifications" 
+              description="Get real-time order updates & offers" 
+              icon={Bell}
+            />
+            <PermissionToggle 
+              type="location" 
+              label="Location Access" 
+              description="Faster delivery addresses" 
+              icon={MapPin}
+            />
+            <PermissionToggle 
+              type="camera" 
+              label="QR Camera" 
+              description="Scan table & offer codes" 
+              icon={Camera}
+            />
+            <PermissionToggle 
+              type="microphone" 
+              label="Voice Search" 
+              description="Search menu with your voice" 
+              icon={Mic}
+            />
+          </div>
+        </div>
 
         {/* Loading State */}
         {customerOrdersLoading && customerOrders.length === 0 && (
@@ -373,6 +427,62 @@ export function MyOrdersPage({ onBackToMenu, onNavigateHome }: MyOrdersPageProps
         title="Sign In to Sync Orders"
         subtitle="Connect with Google to view and manage all your One Bite orders across any browser or phone."
       />
+    </div>
+  );
+}
+
+interface PermissionToggleProps {
+  type: 'notifications' | 'location' | 'camera' | 'microphone';
+  label: string;
+  description: string;
+  icon: React.ElementType;
+}
+
+function PermissionToggle({ type, label, description, icon: Icon }: PermissionToggleProps) {
+  const { permissions, openPermissionModal } = usePermissions();
+  const status = permissions[type];
+
+  const getStatusInfo = () => {
+    switch (status) {
+      case 'granted':
+        return { label: 'Enabled', color: 'text-emerald-500', bgColor: 'bg-emerald-500/10' };
+      case 'denied':
+        return { label: 'Blocked', color: 'text-rose-500', bgColor: 'bg-rose-500/10' };
+      case 'unsupported':
+        return { label: 'Not Supported', color: 'text-stone-500', bgColor: 'bg-stone-500/10' };
+      default:
+        return { label: 'Not Set', color: 'text-amber-500', bgColor: 'bg-amber-500/10' };
+    }
+  };
+
+  const info = getStatusInfo();
+
+  return (
+    <div className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-stone-900 border border-stone-800 hover:border-stone-700 transition-all group">
+      <div className="flex items-center gap-3">
+        <div className={`p-2.5 rounded-xl ${info.bgColor} group-hover:scale-110 transition-transform`}>
+          <Icon className={`w-4 h-4 ${info.color}`} />
+        </div>
+        <div className="space-y-0.5">
+          <h4 className="text-xs font-bold text-white">{label}</h4>
+          <p className="text-[10px] text-stone-500 font-medium leading-tight">{description}</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={status === 'granted' || status === 'unsupported'}
+        onClick={() => openPermissionModal(type)}
+        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all
+          ${status === 'granted' 
+            ? 'bg-emerald-500/10 text-emerald-500 cursor-default' 
+            : status === 'unsupported'
+            ? 'bg-stone-800 text-stone-600 cursor-not-allowed'
+            : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-900/20 active:scale-95 cursor-pointer'
+          }`}
+      >
+        {info.label}
+      </button>
     </div>
   );
 }

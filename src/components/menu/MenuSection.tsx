@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
+import { usePermissions } from '../../context/PermissionContext.tsx';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
 import { FoodCard } from './FoodCard.tsx';
 import { FoodDetailsModal } from './FoodDetailsModal.tsx';
 import { MenuItem } from '../../types/index.ts';
-import { Search, UtensilsCrossed, Sparkles, ShoppingBag, ArrowRight } from 'lucide-react';
+import { Search, UtensilsCrossed, Sparkles, ShoppingBag, ArrowRight, Mic } from 'lucide-react';
 
 interface MenuSectionProps {
   id?: string;
@@ -20,6 +21,7 @@ export function MenuSection({
   onNavigateToCheckout,
 }: MenuSectionProps) {
   const { categories, menuItems, cart, cartTotal, setIsCartOpen } = useRestaurant();
+  const { openPermissionModal } = usePermissions();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [dietaryFilter, setDietaryFilter] = useState<DietaryFilter>('all');
@@ -163,15 +165,39 @@ export function MenuSection({
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 text-stone-900 placeholder:text-stone-400 transition-all"
               />
-              {searchQuery && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
+                  onClick={async () => {
+                    await openPermissionModal('microphone');
+                    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                    if (SpeechRecognition) {
+                      const recognition = new SpeechRecognition();
+                      recognition.lang = 'en-IN';
+                      recognition.onresult = (event: any) => {
+                        const transcript = event.results[0][0].transcript;
+                        setSearchQuery(transcript);
+                      };
+                      recognition.start();
+                    } else {
+                      alert('Voice search is not supported in this browser.');
+                    }
+                  }}
+                  className="p-1.5 rounded-lg text-stone-400 hover:text-amber-600 hover:bg-amber-500/10 transition-all cursor-pointer"
+                  title="Search with Voice"
                 >
-                  Clear
+                  <Mic className="w-4 h-4" />
                 </button>
-              )}
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Dietary Classification Filters */}

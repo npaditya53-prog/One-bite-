@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { api, deliveryAuthStorage } from '../../services/api.ts';
+import { api } from '../../services/api.ts';
 import { auth, signInWithEmailAndPassword } from '../../services/firebase.ts';
 import { OneBiteLogo } from '../common/OneBiteLogo.tsx';
 import { useToast } from '../common/Toast.tsx';
@@ -54,8 +54,7 @@ export const DeliveryLogin: React.FC<DeliveryLoginProps> = ({
       }
 
       // 2. Authorize via secure backend delivery endpoint
-      const res = await api.deliveryLogin(cleanId, password);
-      deliveryAuthStorage.setToken(res.token);
+      await api.deliveryLogin(cleanId, password);
       showToast('Delivery Partner login successful!', 'success');
       onSuccess();
     } catch (err: any) {

@@ -27,13 +27,8 @@ import {
   handleFirestoreError,
   OperationType,
   User,
-  saveOrderToFirestore,
-  assignOrderInFirestore,
-  unassignOrderInFirestore,
-  fetchCustomerOrdersFromFirestore,
-  updateOrderStatusInFirestore,
 } from '../services/firebase.ts';
-import { doc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, collection, onSnapshot } from 'firebase/firestore';
 import {
   isOfferPubliclyActive,
   calculateCartDiscount,
@@ -56,15 +51,6 @@ import {
   subscribeToCategories,
   subscribeToSettings,
   subscribeToCoupons,
-  saveMenuItemToFirestore,
-  deleteMenuItemFromFirestore,
-  saveOfferToFirestore,
-  deleteOfferFromFirestore,
-  saveCategoryToFirestore,
-  deleteCategoryFromFirestore,
-  saveSettingsToFirestore,
-  saveCouponToFirestore,
-  deleteCouponFromFirestore,
 } from '../services/firestoreCatalog.ts';
 
 export interface OpenStatus {
@@ -90,6 +76,8 @@ interface RestaurantContextType {
   error: string | null;
   isAdmin: boolean;
   adminUser: { email?: string; phone?: string; identifier?: string; role: string } | null;
+  isDelivery: boolean;
+  deliveryUser: { identifier?: string; role: string } | null;
   openStatus: OpenStatus;
   isClosedModalOpen: boolean;
   setIsClosedModalOpen: (open: boolean) => void;
@@ -151,6 +139,8 @@ interface RestaurantContextType {
   sendOtp: (phone: string) => Promise<{ success: boolean; message: string; expiresInSeconds?: number }>;
   forgotPassword: (email: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
+  deliveryLogin: (id: string, pass: string) => Promise<void>;
+  deliveryLogout: () => Promise<void>;
   firebaseUser: User | null;
   updateSettings: (data: Partial<SiteSettings>) => Promise<void>;
   saveCategory: (category: Partial<Category>) => Promise<Category>;
@@ -203,6 +193,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminUser, setAdminUser] = useState<{ email?: string; phone?: string; identifier?: string; role: string } | null>(null);
+  const [isDelivery, setIsDelivery] = useState(false);
+  const [deliveryUser, setDeliveryUser] = useState<{ identifier?: string; role: string } | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
 
@@ -262,14 +254,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         console.warn('API getMyOrders error:', e);
       }
 
-      let firestoreOrders: CustomerOrder[] = [];
-      if (uid) {
-        try {
-          firestoreOrders = await fetchCustomerOrdersFromFirestore(uid);
-        } catch (e) {
-          console.warn('Firestore fetchCustomerOrders error:', e);
-        }
-      }
+      const firestoreOrders: CustomerOrder[] = [];
+
 
       const orderMap = new Map<string, CustomerOrder>();
       firestoreOrders.forEach(o => orderMap.set(o.id, o));
@@ -385,10 +371,22 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     }
   }, []);
 
+  const checkDeliveryAuth = useCallback(async () => {
+    const authed = await api.checkDeliveryAuth();
+    setIsDelivery(authed);
+    if (authed) {
+      // In a real app, the server /api/delivery/check should return user info
+      setDeliveryUser({ role: 'delivery' });
+    } else {
+      setDeliveryUser(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
     checkAdminAuth();
-  }, [loadData, checkAdminAuth]);
+    checkDeliveryAuth();
+  }, [loadData, checkAdminAuth, checkDeliveryAuth]);
 
   // Authoritative Real-Time Catalog Synchronization (Menu Items, Offers, Categories & Settings)
   useEffect(() => {
@@ -827,17 +825,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         };
       }
 
-      // Automatically save complete order details to Firebase Firestore
-      let firestoreSaved = false;
-      try {
-        await saveOrderToFirestore(createdOrder, isAdmin);
-        firestoreSaved = true;
-      } catch (fsErr: any) {
-        console.warn('Firestore order write note:', fsErr?.message);
-      }
-
-      // Strict reliability check: do not continue unless order was successfully saved
-      if (!apiSaved && !firestoreSaved) {
+      // createdOrder is already validated and synced by the server
+      if (!apiSaved) {
         throw new Error('Unable to record order in database. Please check your connection and try again.');
       }
 
@@ -1029,84 +1018,84 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
     return await api.forgotPassword(email);
   };
 
+  const handleDeliveryLogin = async (id: string, pass: string) => {
+    const res = await api.deliveryLogin(id, pass);
+    setIsDelivery(true);
+    setDeliveryUser(res.user);
+  };
+
+  const handleDeliveryLogout = async () => {
+    await api.deliveryLogout();
+    setIsDelivery(false);
+    setDeliveryUser(null);
+  };
+
   const handleLogout = async () => {
     await api.logout();
     await signOutUser().catch(() => {});
-    authStorage.clearToken();
     setIsAdmin(false);
     setAdminUser(null);
+    setIsDelivery(false);
+    setDeliveryUser(null);
     setFirebaseUser(null);
   };
 
   const handleUpdateSettings = async (settingsData: Partial<SiteSettings>) => {
-    await saveSettingsToFirestore(settingsData);
     try {
       const updated = await api.updateSettings(settingsData);
       setData(prev => ({ ...prev, settings: updated }));
     } catch (apiErr) {
       console.warn('API updateSettings notice:', apiErr);
+      throw apiErr;
     }
   };
 
   const handleSaveCategory = async (categoryData: Partial<Category>) => {
-    const savedFs = await saveCategoryToFirestore(categoryData);
     try {
-      await api.saveCategory(savedFs);
+      const saved = await api.saveCategory(categoryData);
+      return saved;
     } catch (apiErr) {
       console.warn('API saveCategory notice:', apiErr);
+      throw apiErr;
     }
-    return savedFs;
   };
 
   const handleDeleteCategory = async (id: string) => {
-    await deleteCategoryFromFirestore(id);
     try {
       await api.deleteCategory(id);
     } catch (apiErr) {
       console.warn('API deleteCategory notice:', apiErr);
+      throw apiErr;
     }
   };
 
   const handleSaveMenuItem = async (itemData: Partial<MenuItem>) => {
-    const savedFs = await saveMenuItemToFirestore(itemData);
     try {
-      await api.saveMenuItem(savedFs);
+      const saved = await api.saveMenuItem(itemData);
+      return saved;
     } catch (apiErr) {
       console.warn('API saveMenuItem notice:', apiErr);
+      throw apiErr;
     }
-    return savedFs;
   };
 
   const handleDeleteMenuItem = async (id: string) => {
-    await deleteMenuItemFromFirestore(id);
     try {
       await api.deleteMenuItem(id);
     } catch (apiErr) {
       console.warn('API deleteMenuItem notice:', apiErr);
+      throw apiErr;
     }
   };
 
   const handleDuplicateMenuItem = async (id: string) => {
-    const sourceItem = data.menuItems.find(i => i.id === id);
-    if (!sourceItem) {
-      throw new Error('Original menu item not found for duplication');
-    }
-    const duplicatedPayload: Partial<MenuItem> = {
-      ...sourceItem,
-      id: `item_${Date.now()}`,
-      name: `${sourceItem.name} (Copy)`,
-      slug: `${sourceItem.slug}-copy-${Date.now().toString().slice(-4)}`,
-      displayOrder: (sourceItem.displayOrder ?? 0) + 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    const duplicatedFs = await saveMenuItemToFirestore(duplicatedPayload);
     try {
-      await api.duplicateMenuItem(id);
+      const duplicated = await api.duplicateMenuItem(id);
+      return duplicated;
     } catch (apiErr) {
       console.warn('API duplicateMenuItem notice:', apiErr);
+      throw apiErr;
     }
-    return duplicatedFs;
   };
 
   const handleSaveGalleryItem = async (photoData: Partial<GalleryItem>) => {
@@ -1153,40 +1142,40 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
   };
 
   const handleSaveOffer = async (offerData: Partial<OfferItem>) => {
-    const savedFs = await saveOfferToFirestore(offerData);
     try {
-      await api.saveOffer(savedFs);
+      const saved = await api.saveOffer(offerData);
+      return saved;
     } catch (apiErr) {
       console.warn('API saveOffer notice:', apiErr);
+      throw apiErr;
     }
-    return savedFs;
   };
 
   const handleDeleteOffer = async (id: string) => {
-    await deleteOfferFromFirestore(id);
     try {
       await api.deleteOffer(id);
     } catch (apiErr) {
       console.warn('API deleteOffer notice:', apiErr);
+      throw apiErr;
     }
   };
 
   const handleSaveCoupon = async (couponData: Partial<Coupon>) => {
-    const savedFs = await saveCouponToFirestore(couponData);
     try {
-      await api.createCoupon(savedFs).catch(() => api.updateCoupon(savedFs.id, savedFs));
+      const saved = await api.createCoupon(couponData).catch(() => api.updateCoupon(couponData.id!, couponData));
+      return saved;
     } catch (apiErr) {
       console.warn('API saveCoupon notice:', apiErr);
+      throw apiErr;
     }
-    return savedFs;
   };
 
   const handleDeleteCoupon = async (id: string) => {
-    await deleteCouponFromFirestore(id);
     try {
       await api.deleteCoupon(id);
     } catch (apiErr) {
       console.warn('API deleteCoupon notice:', apiErr);
+      throw apiErr;
     }
   };
 
@@ -1218,17 +1207,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       console.warn('Backend server status update note:', e?.message);
     }
 
-    // 2. Real-time Firestore transactional update
-    try {
-      await updateOrderStatusInFirestore(id, status, {
-        note,
-        paymentStatus,
-        updatedBy: adminUser?.identifier || auth.currentUser?.email || 'Admin',
-        updaterId: auth.currentUser?.email || adminUser?.identifier || 'admin',
-      });
-    } catch (fsErr: any) {
-      console.warn('Firestore status update sync note:', fsErr?.message);
-    }
+    // 2. Synchronization handled by server authoritative sync.
+    // Client-side writes are deprecated for security hardening.
 
     // 3. Immediately reflect in local React context
     const nowIso = new Date().toISOString();
@@ -1282,25 +1262,15 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
 
   const handleUpdateOrderPaymentStatus = async (id: string, paymentStatus: 'unpaid' | 'paid') => {
     const updated = await api.updateOrderPaymentStatus(id, paymentStatus);
-    try {
-      const orderDocRef = doc(db, 'orders', id);
-      await setDoc(orderDocRef, { paymentStatus }, { merge: true });
-    } catch (fsErr: any) {
-      console.warn('Firestore payment update note:', fsErr?.message);
-    }
+    // Sync handled by server API
+
     setOrders(prev => prev.map(o => (o.id === id ? { ...o, ...updated, paymentStatus } : o)));
   };
 
   const handleAssignOrderToDeliveryBoy = async (orderId: string) => {
     const updated = await api.assignOrder(orderId);
-    try {
-      await assignOrderInFirestore(orderId, {
-        assignedAt: updated.assignedAt,
-        assignedBy: updated.assignedBy || 'Admin',
-      });
-    } catch (fsErr: any) {
-      console.warn('Firestore assign note:', fsErr?.message);
-    }
+    // Sync handled by server API
+
     setOrders(prev =>
       prev.map(o => (o.id === orderId ? { ...o, ...updated, assignedToDeliveryBoy: true, deliveryStatus: 'Assigned' } : o))
     );
@@ -1308,11 +1278,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
 
   const handleUnassignOrderFromDeliveryBoy = async (orderId: string) => {
     const updated = await api.unassignOrder(orderId);
-    try {
-      await unassignOrderInFirestore(orderId);
-    } catch (fsErr: any) {
-      console.warn('Firestore unassign note:', fsErr?.message);
-    }
+    // Sync handled by server API
+
     setOrders(prev =>
       prev.map(o => (o.id === orderId ? { ...o, ...updated, assignedToDeliveryBoy: false, deliveryStatus: 'Pending' } : o))
     );
@@ -1327,11 +1294,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       deliveryStatus: assignImmediately ? 'Assigned' : 'Pending',
     };
     const created = await api.createOrder(payload);
-    try {
-      await saveOrderToFirestore(created);
-    } catch (fsErr: any) {
-      console.warn('Firestore manual order note:', fsErr?.message);
-    }
+    // Sync handled by server API
+
     setOrders(prev => [created, ...prev.filter(o => o.id !== created.id)]);
     return created;
   };
@@ -1352,6 +1316,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         error,
         isAdmin,
         adminUser,
+        isDelivery,
+        deliveryUser,
         customerOrders,
         customerOrdersLoading,
         loadCustomerOrders,
@@ -1392,6 +1358,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         sendOtp: handleSendOtp,
         forgotPassword: handleForgotPassword,
         logout: handleLogout,
+        deliveryLogin: handleDeliveryLogin,
+        deliveryLogout: handleDeliveryLogout,
         firebaseUser,
         updateSettings: handleUpdateSettings,
         saveCategory: handleSaveCategory,

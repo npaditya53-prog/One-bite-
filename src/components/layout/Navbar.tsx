@@ -13,7 +13,9 @@ import {
   LogIn,
   LogOut,
   Instagram,
+  QrCode,
 } from 'lucide-react';
+import { QRScanner } from '../common/QRScanner.tsx';
 
 interface NavbarProps {
   currentView: string;
@@ -34,6 +36,7 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
   } = useRestaurant();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -170,6 +173,17 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
               </a>
             )}
 
+            {/* QR Scanner Button */}
+            <button
+              type="button"
+              onClick={() => setIsQRScannerOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs sm:text-sm font-bold border border-stone-800 transition-all cursor-pointer group"
+              title="Scan Table QR or Special Offer"
+            >
+              <QrCode className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+              <span className="hidden xl:inline">Scan QR</span>
+            </button>
+
             {/* Cart Button */}
             <button
               type="button"
@@ -247,6 +261,15 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
 
           {/* Mobile & Tablet Right Controls (< 1024px) */}
           <div className="flex lg:hidden items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsQRScannerOpen(true)}
+              className="p-2 rounded-lg bg-stone-900 text-amber-400 border border-stone-800"
+              aria-label="Scan QR Code"
+              title="Scan Table QR"
+            >
+              <QrCode className="w-4 h-4" />
+            </button>
             <InstallAppButton />
             <button
               type="button"
@@ -438,6 +461,15 @@ export function Navbar({ currentView, onNavigate, onOpenOnboarding }: NavbarProp
           </div>
         </div>
       )}
+      {/* QR Code Scanner Modal */}
+      <QRScanner 
+        isOpen={isQRScannerOpen} 
+        onClose={() => setIsQRScannerOpen(false)}
+        onScan={(data) => {
+          console.log('QR Scanned:', data);
+          setIsQRScannerOpen(false);
+        }}
+      />
     </header>
   );
 }

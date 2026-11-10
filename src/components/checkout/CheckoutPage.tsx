@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext.tsx';
+import { usePermissions } from '../../context/PermissionContext.tsx';
 import { useToast } from '../common/Toast.tsx';
 import { FoodTypeBadge } from '../common/FoodTypeBadge.tsx';
 import {
@@ -48,6 +49,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
     openStatus,
     setIsClosedModalOpen,
   } = useRestaurant();
+  const { openPermissionModal } = usePermissions();
   const { showToast } = useToast();
 
   const [customerName, setCustomerName] = useState(() => firebaseUser?.displayName || '');
@@ -465,10 +467,36 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
 
               {/* Delivery Address */}
               <div className="space-y-4 pt-4 border-t border-stone-200">
-                <h3 className="text-sm font-extrabold uppercase tracking-wider text-stone-900 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-amber-600" />
-                  <span>2. Home Delivery Address (Motihari)</span>
-                </h3>
+                <div className="flex items-center justify-between gap-4">
+                  <h3 className="text-sm font-extrabold uppercase tracking-wider text-stone-900 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-amber-600" />
+                    <span>2. Home Delivery Address (Motihari)</span>
+                  </h3>
+                  
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const success = await openPermissionModal('location');
+                      // The modal handles the request. If we want to wait for it, 
+                      // we might need a callback or just use the navigator directly here if already granted.
+                      if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition((pos) => {
+                          const { latitude, longitude } = pos.coords;
+                          // In a real app, we would reverse geocode here.
+                          // For now, we just show a toast or fill in a dummy landmark.
+                          showToast(`Location detected: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`, 'success');
+                          setLandmark(prev => prev || `📍 Near ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+                        }, (err) => {
+                          showToast('Unable to detect location. Please enter manually.', 'error');
+                        });
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 text-[11px] font-bold transition-colors cursor-pointer border border-amber-500/20"
+                  >
+                    <Navigation className="w-3.5 h-3.5" />
+                    <span>Detect My Location</span>
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>

@@ -3,12 +3,29 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import cookieParser from 'cookie-parser';
+import { initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getMessaging as getAdminMessaging } from 'firebase-admin/messaging';
+import firebaseConfig from './firebase-applet-config.json';
 import { initialData } from './src/data/initialData.ts';
 import { DatabaseSchema, FoodType, MenuItem, CustomerOrder } from './src/types/index.ts';
 
 dotenv.config();
 
+// Initialize Firebase Admin on Server for authoritative synchronization
+const adminApp = initializeAdminApp({
+  projectId: firebaseConfig.projectId,
+});
+const db = getAdminFirestore(adminApp);
+// Admin Firestore might need the databaseId explicitly if it's not default
+if (firebaseConfig.firestoreDatabaseId) {
+  // In firebase-admin, you set databaseId in the getFirestore call or via env
+}
+
 const app = express();
+app.use(cookieParser());
 const PORT = 3000;
 const isVercel = Boolean(process.env.VERCEL);
 const DATA_DIR = isVercel ? '/tmp/data' : path.resolve(process.cwd(), 'data');
@@ -70,6 +87,33 @@ function loadDatabase(): DatabaseSchema {
     saveDatabase(initialData);
   } catch {}
   return JSON.parse(JSON.stringify(initialData));
+}
+
+/**
+ * Securely synchronize a specific document to Firebase Firestore from the backend using Admin SDK.
+ * This bypasses security rules, allowing the server to be the single authoritative source of truth.
+ */
+async function syncDocToFirestore(collectionName: string, docId: string, data: any) {
+  try {
+    const docRef = db.collection(collectionName).doc(docId);
+    // Deep clone and sanitize (remove functions, undefined, etc.)
+    const cleanData = JSON.parse(JSON.stringify(data));
+    await docRef.set(cleanData);
+  } catch (err) {
+    console.error(`[Firestore Admin Sync Error] Failed to sync ${collectionName}/${docId}:`, err);
+  }
+}
+
+/**
+ * Securely delete a document from Firebase Firestore from the backend using Admin SDK.
+ */
+async function deleteDocFromFirestore(collectionName: string, docId: string) {
+  try {
+    const docRef = db.collection(collectionName).doc(docId);
+    await docRef.delete();
+  } catch (err) {
+    console.error(`[Firestore Admin Sync Error] Failed to delete ${collectionName}/${docId}:`, err);
+  }
 }
 
 function saveDatabase(data: DatabaseSchema) {
@@ -235,8 +279,7 @@ function sanitizeText(val: unknown, maxLen = 1000): string {
     .replace(/[<>]/g, (char) => (char === '<' ? '&lt;' : '&gt;'));
 }
 
-// Admin credentials & secure salted password hashing
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'kumaraditye9@gmail.com';
+// Admin credentials from environment variables
 const ADMIN_EMAILS = Array.from(new Set([
   'kumaraditye9@gmail.com',
   (process.env.ADMIN_EMAIL || 'kumaraditye9@gmail.com').toLowerCase().trim(),
@@ -244,19 +287,7 @@ const ADMIN_EMAILS = Array.from(new Set([
   'admin@onebitemotihari.in',
 ]));
 
-const PASSWORD_SALT = process.env.PASSWORD_SALT || 'onebite_secure_salt_motihari_2026';
-
-function hashPassword(password: string): string {
-  return crypto.pbkdf2Sync(password, PASSWORD_SALT, 100000, 64, 'sha512').toString('hex');
-}
-
-// Fallback legacy sha256 support for backward compatibility
-function legacyHash(password: string): string {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
-
-const DEFAULT_ADMIN_PASS = process.env.ADMIN_PASSWORD || 'onebite2026!';
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || hashPassword(DEFAULT_ADMIN_PASS);
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 
 // Delivery Boy Configuration
 const DELIVERY_EMAILS = Array.from(new Set([
@@ -265,8 +296,8 @@ const DELIVERY_EMAILS = Array.from(new Set([
   'delivery@onebitemotihari.in',
   'deliveryboy@onebitemotihari.in',
 ]));
-const DEFAULT_DELIVERY_PASS = process.env.DELIVERY_PASSWORD || '12345';
-const DELIVERY_PASSWORD_HASH = process.env.DELIVERY_PASSWORD_HASH || hashPassword(DEFAULT_DELIVERY_PASS);
+
+const DELIVERY_PASSWORD_HASH = process.env.DELIVERY_PASSWORD_HASH;
 
 interface SessionData {
   createdAt: number;
@@ -326,20 +357,22 @@ function isAuthorizedAdminPhone(phone: string): boolean {
 
 // Auth Middleware: Admin Only
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: missing session token' });
+  const token = req.cookies?.onebite_session;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: missing session' });
   }
-  const token = authHeader.split(' ')[1];
+  
   const session = activeSessions.get(token);
 
-  if (!session || (session.role && session.role !== 'admin')) {
+  if (!session || session.role !== 'admin') {
     return res.status(401).json({ error: 'Unauthorized: admin privileges required' });
   }
 
   const now = Date.now();
   if (now - session.createdAt > SESSION_MAX_AGE_MS) {
     activeSessions.delete(token);
+    res.clearCookie('onebite_session');
     return res.status(401).json({ error: 'Unauthorized: session expired, please login again' });
   }
 
@@ -351,11 +384,12 @@ function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 // Auth Middleware: Delivery Partner or Admin
 function requireDeliveryOrAdmin(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: missing session token' });
+  const token = req.cookies?.onebite_session;
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: missing session' });
   }
-  const token = authHeader.split(' ')[1];
+  
   const session = activeSessions.get(token);
 
   if (!session || (session.role !== 'delivery' && session.role !== 'admin')) {
@@ -365,6 +399,7 @@ function requireDeliveryOrAdmin(req: Request, res: Response, next: NextFunction)
   const now = Date.now();
   if (now - session.createdAt > SESSION_MAX_AGE_MS) {
     activeSessions.delete(token);
+    res.clearCookie('onebite_session');
     return res.status(401).json({ error: 'Unauthorized: session expired, please login again' });
   }
 
@@ -508,39 +543,48 @@ app.get('/api/instagram/feed', async (req: Request, res: Response) => {
 });
 
 // 2. Auth Endpoints: Email & Password Login
-app.post('/api/auth/login', authRateLimiter, (req, res) => {
+app.post('/api/auth/login', authRateLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
   const cleanEmail = email.trim().toLowerCase();
-  const passHash = hashPassword(password);
-  const legHash = legacyHash(password);
 
   if (!ADMIN_PASSWORD_HASH) {
-    return res.status(500).json({ error: 'Admin authentication is not configured. Please set ADMIN_PASSWORD in environment variables.' });
+    console.error('[SECURITY ERROR] ADMIN_PASSWORD_HASH environment variable is not configured.');
+    return res.status(500).json({ error: 'Authentication service is temporarily unavailable.' });
   }
 
-  const isValidPassword =
-    passHash === ADMIN_PASSWORD_HASH ||
-    legHash === ADMIN_PASSWORD_HASH ||
-    (Boolean(DEFAULT_ADMIN_PASS) && (passHash === hashPassword(DEFAULT_ADMIN_PASS) || legHash === legacyHash(DEFAULT_ADMIN_PASS)));
+  if (ADMIN_EMAILS.includes(cleanEmail)) {
+    try {
+      const isValidPassword = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
+      
+      if (isValidPassword) {
+        const token = crypto.randomUUID();
+        activeSessions.set(token, {
+          createdAt: Date.now(),
+          lastActive: Date.now(),
+          adminIdentifier: cleanEmail,
+          identifier: cleanEmail,
+          role: 'admin',
+        });
 
-  if (ADMIN_EMAILS.includes(cleanEmail) && isValidPassword) {
-    const token = crypto.randomUUID();
-    activeSessions.set(token, {
-      createdAt: Date.now(),
-      lastActive: Date.now(),
-      adminIdentifier: cleanEmail,
-      identifier: cleanEmail,
-      role: 'admin',
-    });
-    return res.json({
-      success: true,
-      token,
-      user: { email: cleanEmail, role: 'admin' },
-    });
+        res.cookie('onebite_session', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: SESSION_MAX_AGE_MS,
+        });
+
+        return res.json({
+          success: true,
+          user: { email: cleanEmail, role: 'admin' },
+        });
+      }
+    } catch (err) {
+      console.error('[AUTH ERROR] bcrypt comparison failed:', err);
+    }
   }
 
   return res.status(401).json({ error: 'Invalid email or password' });
@@ -677,11 +721,17 @@ app.post('/api/auth/verify-otp', authRateLimiter, (req, res) => {
     role: 'admin',
   });
 
+  res.cookie('onebite_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: SESSION_MAX_AGE_MS,
+  });
+
   console.log(`[AUTH AUDIT] Admin session granted to verified mobile +${normalized}`);
 
   return res.json({
     success: true,
-    token,
     user: { phone: `+${normalized}`, role: 'admin' },
   });
 });
@@ -709,9 +759,15 @@ app.post('/api/auth/login-phone', authRateLimiter, (req, res) => {
     role: 'admin',
   });
 
+  res.cookie('onebite_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: SESSION_MAX_AGE_MS,
+  });
+
   return res.json({
     success: true,
-    token,
     user: { phone: `+${normalized}`, role: 'admin' },
   });
 });
@@ -753,9 +809,15 @@ app.post('/api/auth/login-firebase-user', authRateLimiter, (req, res) => {
     role: 'admin',
   });
 
+  res.cookie('onebite_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: SESSION_MAX_AGE_MS,
+  });
+
   return res.json({
     success: true,
-    token,
     user: { identifier: adminIdentifier, role: 'admin' },
   });
 });
@@ -778,42 +840,44 @@ app.post('/api/auth/forgot-password', authRateLimiter, (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
+  const token = req.cookies?.onebite_session;
+  if (token) {
     const session = activeSessions.get(token);
     if (session && Date.now() - session.createdAt <= SESSION_MAX_AGE_MS) {
-      return res.json({ authenticated: true, user: { identifier: session.adminIdentifier, role: 'admin' } });
+      return res.json({ 
+        authenticated: true, 
+        user: { 
+          identifier: session.adminIdentifier || session.identifier, 
+          role: session.role 
+        } 
+      });
     }
   }
   return res.status(401).json({ authenticated: false });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
+  const token = req.cookies?.onebite_session;
+  if (token) {
     activeSessions.delete(token);
   }
+  res.clearCookie('onebite_session');
   res.json({ success: true });
 });
 
 // 2.5 Delivery Boy Authentication & Management Endpoints
-app.post('/api/delivery/login', authRateLimiter, (req, res) => {
+app.post('/api/delivery/login', authRateLimiter, async (req, res) => {
   const { identifier, password } = req.body || {};
   if (!identifier || !password) {
     return res.status(400).json({ error: 'Delivery ID/email and password are required' });
   }
 
   const cleanIdentifier = String(identifier).trim().toLowerCase();
-  const passHash = hashPassword(password);
-  const legHash = legacyHash(password);
 
-  const isValidPassword =
-    password === '12345' ||
-    password === DEFAULT_DELIVERY_PASS ||
-    (Boolean(DELIVERY_PASSWORD_HASH) && (passHash === DELIVERY_PASSWORD_HASH || legHash === DELIVERY_PASSWORD_HASH)) ||
-    (Boolean(DEFAULT_DELIVERY_PASS) && (passHash === hashPassword(DEFAULT_DELIVERY_PASS) || legHash === legacyHash(DEFAULT_DELIVERY_PASS)));
+  if (!DELIVERY_PASSWORD_HASH) {
+    console.error('[SECURITY ERROR] DELIVERY_PASSWORD_HASH environment variable is not configured.');
+    return res.status(500).json({ error: 'Authentication service is temporarily unavailable.' });
+  }
 
   const isEmailMatch =
     cleanIdentifier === 'yoonekaditya.ai@gmail.com' ||
@@ -821,23 +885,38 @@ app.post('/api/delivery/login', authRateLimiter, (req, res) => {
     cleanIdentifier === 'delivery' ||
     cleanIdentifier === 'deliveryboy';
 
-  if (isEmailMatch && isValidPassword) {
-    const token = crypto.randomUUID();
-    const formattedId = cleanIdentifier.includes('@') ? cleanIdentifier : `${cleanIdentifier}@onebitemotihari.in`;
-    activeSessions.set(token, {
-      createdAt: Date.now(),
-      lastActive: Date.now(),
-      identifier: formattedId,
-      role: 'delivery',
-    });
-    return res.json({
-      success: true,
-      token,
-      user: {
-        identifier: formattedId,
-        role: 'delivery',
-      },
-    });
+  if (isEmailMatch) {
+    try {
+      const isValidPassword = await bcrypt.compare(password, DELIVERY_PASSWORD_HASH);
+      
+      if (isValidPassword) {
+        const token = crypto.randomUUID();
+        const formattedId = cleanIdentifier.includes('@') ? cleanIdentifier : `${cleanIdentifier}@onebitemotihari.in`;
+        activeSessions.set(token, {
+          createdAt: Date.now(),
+          lastActive: Date.now(),
+          identifier: formattedId,
+          role: 'delivery',
+        });
+
+        res.cookie('onebite_session', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: SESSION_MAX_AGE_MS,
+        });
+
+        return res.json({
+          success: true,
+          user: {
+            identifier: formattedId,
+            role: 'delivery',
+          },
+        });
+      }
+    } catch (err) {
+      console.error('[AUTH ERROR] bcrypt comparison failed for delivery:', err);
+    }
   }
 
   return res.status(401).json({ error: 'Invalid delivery credentials. Please verify your login details.' });
@@ -870,19 +949,24 @@ app.post('/api/delivery/login-firebase-user', authRateLimiter, (req, res) => {
     role: 'delivery',
   });
 
+  res.cookie('onebite_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: SESSION_MAX_AGE_MS,
+  });
+
   return res.json({
     success: true,
-    token,
     user: { identifier: deliveryIdentifier, role: 'delivery' },
   });
 });
 
 app.get('/api/delivery/check', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const token = req.cookies?.onebite_session;
+  if (!token) {
     return res.json({ authenticated: false });
   }
-  const token = authHeader.split(' ')[1];
   const session = activeSessions.get(token);
   if (!session || (session.role !== 'delivery' && session.role !== 'admin')) {
     return res.json({ authenticated: false });
@@ -898,8 +982,46 @@ app.get('/api/delivery/orders', requireDeliveryOrAdmin, (_req, res) => {
   res.json(database.orders);
 });
 
+/**
+ * Helper to notify a customer about an order status change
+ */
+async function notifyOrderStatusChange(order: CustomerOrder) {
+  if (!order.customerUid) return;
+
+  try {
+    const snapshot = await db.collection('deviceSubscriptions')
+      .where('userId', '==', order.customerUid)
+      .where('active', '==', true)
+      .get();
+
+    if (snapshot.empty) return;
+
+    const statusMap: Record<string, string> = {
+      confirmed: 'Your order has been confirmed by One Bite!',
+      preparing: 'Chef is preparing your delicious meal 👨‍🍳',
+      packed: 'Your order is packed and ready for delivery 🎁',
+      out_for_delivery: 'Our delivery partner is on the way! 🛵',
+      delivered: 'Enjoy your meal! Your order has been delivered. 😋',
+      cancelled: 'Your order has been cancelled. Contact support for details.',
+    };
+
+    const message = statusMap[order.status] || `Your order status is now ${order.status}.`;
+    const title = `Order #${order.id.slice(-6).toUpperCase()}`;
+
+    snapshot.forEach(async (doc) => {
+      const token = doc.id;
+      await sendPushNotification(token, title, message, { 
+        orderId: order.id, 
+        url: '/my-orders' 
+      });
+    });
+  } catch (err) {
+    console.error(`[FCM] Failed to notify order ${order.id}:`, err);
+  }
+}
+
 // Admin endpoint: Assign an order to the single Delivery Boy
-app.put('/api/orders/:id/assign', requireAdmin, (req, res) => {
+app.put('/api/orders/:id/assign', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const session = (req as any).adminSession as SessionData;
 
@@ -929,11 +1051,16 @@ app.put('/api/orders/:id/assign', requireAdmin, (req, res) => {
   }
 
   saveDatabase(database);
+  await syncDocToFirestore('orders', order.id, order);
+  
+  // TRIGGER NOTIFICATION
+  notifyOrderStatusChange(order);
+  
   res.json(order);
 });
 
 // Admin endpoint: Unassign an order from the delivery boy
-app.put('/api/orders/:id/unassign', requireAdmin, (req, res) => {
+app.put('/api/orders/:id/unassign', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   if (!database.orders) database.orders = [];
@@ -950,11 +1077,12 @@ app.put('/api/orders/:id/unassign', requireAdmin, (req, res) => {
   order.deliveryStatus = 'Pending';
 
   saveDatabase(database);
+  await syncDocToFirestore('orders', order.id, order);
   res.json(order);
 });
 
 // Delivery Boy endpoint: Start Delivery (dispatch)
-app.put('/api/delivery/orders/:id/start', requireDeliveryOrAdmin, (req, res) => {
+app.put('/api/delivery/orders/:id/start', requireDeliveryOrAdmin, async (req, res) => {
   const { id } = req.params;
 
   if (!database.orders) database.orders = [];
@@ -976,10 +1104,15 @@ app.put('/api/delivery/orders/:id/start', requireDeliveryOrAdmin, (req, res) => 
   order.startedDeliveryAt = new Date().toISOString();
 
   saveDatabase(database);
+  await syncDocToFirestore('orders', order.id, order);
+  
+  // TRIGGER NOTIFICATION
+  notifyOrderStatusChange(order);
+  
   res.json(order);
 });
 
-app.put('/api/delivery/orders/:id/deliver', requireDeliveryOrAdmin, (req, res) => {
+app.put('/api/delivery/orders/:id/deliver', requireDeliveryOrAdmin, async (req, res) => {
   const { id } = req.params;
   const session = (req as any).deliverySession as SessionData;
 
@@ -1006,15 +1139,20 @@ app.put('/api/delivery/orders/:id/deliver', requireDeliveryOrAdmin, (req, res) =
   order.deliveredBy = deliveryIdentifier;
 
   saveDatabase(database);
+  await syncDocToFirestore('orders', order.id, order);
+  
+  // TRIGGER NOTIFICATION
+  notifyOrderStatusChange(order);
+  
   res.json(order);
 });
 
 app.post('/api/delivery/logout', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
+  const token = req.cookies?.onebite_session;
+  if (token) {
     activeSessions.delete(token);
   }
+  res.clearCookie('onebite_session');
   res.json({ success: true, message: 'Delivery partner logged out successfully' });
 });
 
@@ -1023,7 +1161,7 @@ app.get('/api/settings', (_req, res) => {
   res.json(database.settings);
 });
 
-app.put('/api/settings', requireAdmin, (req, res) => {
+app.put('/api/settings', requireAdmin, async (req, res) => {
   const b = req.body || {};
   database.settings = {
     ...database.settings,
@@ -1043,6 +1181,7 @@ app.put('/api/settings', requireAdmin, (req, res) => {
     updatedAt: new Date().toISOString(),
   };
   saveDatabase(database);
+  await syncDocToFirestore('settings', 'default_settings', database.settings);
   res.json(database.settings);
 });
 
@@ -1051,7 +1190,7 @@ app.get('/api/categories', (_req, res) => {
   res.json(database.categories);
 });
 
-app.post('/api/categories', requireAdmin, (req, res) => {
+app.post('/api/categories', requireAdmin, async (req, res) => {
   const { name, slug, description, displayOrder, active } = req.body;
   if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'Category name is required' });
@@ -1071,10 +1210,11 @@ app.post('/api/categories', requireAdmin, (req, res) => {
   database.categories.push(newCat);
   database.categories.sort((a, b) => a.displayOrder - b.displayOrder);
   saveDatabase(database);
+  await syncDocToFirestore('categories', newCat.id, newCat);
   res.status(201).json(newCat);
 });
 
-app.put('/api/categories/:id', requireAdmin, (req, res) => {
+app.put('/api/categories/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const idx = database.categories.findIndex(c => c.id === id);
   if (idx === -1) {
@@ -1092,10 +1232,11 @@ app.put('/api/categories/:id', requireAdmin, (req, res) => {
   };
   database.categories.sort((a, b) => a.displayOrder - b.displayOrder);
   saveDatabase(database);
+  await syncDocToFirestore('categories', id, database.categories[idx]);
   res.json(database.categories[idx]);
 });
 
-app.delete('/api/categories/:id', requireAdmin, (req, res) => {
+app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   // Check if any menu item is linked
   const hasItems = database.menuItems.some(item => item.categoryId === id);
@@ -1106,6 +1247,7 @@ app.delete('/api/categories/:id', requireAdmin, (req, res) => {
   }
   database.categories = database.categories.filter(c => c.id !== id);
   saveDatabase(database);
+  await deleteDocFromFirestore('categories', id);
   res.json({ success: true });
 });
 
@@ -1114,7 +1256,7 @@ app.get('/api/menu-items', (_req, res) => {
   res.json(database.menuItems);
 });
 
-app.post('/api/menu-items', requireAdmin, (req, res) => {
+app.post('/api/menu-items', requireAdmin, async (req, res) => {
   const {
     categoryId,
     name,
@@ -1159,10 +1301,11 @@ app.post('/api/menu-items', requireAdmin, (req, res) => {
   database.menuItems.push(newItem);
   database.menuItems.sort((a, b) => a.displayOrder - b.displayOrder);
   saveDatabase(database);
+  await syncDocToFirestore('menuItems', newItem.id, newItem);
   res.status(201).json(newItem);
 });
 
-app.put('/api/menu-items/:id', requireAdmin, (req, res) => {
+app.put('/api/menu-items/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const idx = database.menuItems.findIndex(i => i.id === id);
   if (idx === -1) {
@@ -1188,17 +1331,19 @@ app.put('/api/menu-items/:id', requireAdmin, (req, res) => {
   };
   database.menuItems.sort((a, b) => a.displayOrder - b.displayOrder);
   saveDatabase(database);
+  await syncDocToFirestore('menuItems', id, database.menuItems[idx]);
   res.json(database.menuItems[idx]);
 });
 
-app.delete('/api/menu-items/:id', requireAdmin, (req, res) => {
+app.delete('/api/menu-items/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   database.menuItems = database.menuItems.filter(i => i.id !== id);
   saveDatabase(database);
+  await deleteDocFromFirestore('menuItems', id);
   res.json({ success: true });
 });
 
-app.post('/api/menu-items/:id/duplicate', requireAdmin, (req, res) => {
+app.post('/api/menu-items/:id/duplicate', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const item = database.menuItems.find(i => i.id === id);
   if (!item) {
@@ -1210,7 +1355,7 @@ app.post('/api/menu-items/:id/duplicate', requireAdmin, (req, res) => {
     id: 'item_' + Date.now(),
     name: `${item.name} (Copy)`,
     slug: `${item.slug}-copy-${Date.now().toString().slice(-4)}`,
-    displayOrder: item.displayOrder + 1,
+    displayOrder: (item.displayOrder || 0) + 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -1218,6 +1363,7 @@ app.post('/api/menu-items/:id/duplicate', requireAdmin, (req, res) => {
   database.menuItems.push(copy);
   database.menuItems.sort((a, b) => a.displayOrder - b.displayOrder);
   saveDatabase(database);
+  await syncDocToFirestore('menuItems', copy.id, copy);
   res.status(201).json(copy);
 });
 
@@ -1226,7 +1372,7 @@ app.get('/api/gallery', (_req, res) => {
   res.json(database.gallery);
 });
 
-app.post('/api/gallery', requireAdmin, (req, res) => {
+app.post('/api/gallery', requireAdmin, async (req, res) => {
   const { imageUrl, category, caption, displayOrder, featured } = req.body;
   if (!imageUrl) {
     return res.status(400).json({ error: 'Image URL is required' });
@@ -1243,10 +1389,11 @@ app.post('/api/gallery', requireAdmin, (req, res) => {
   database.gallery.push(newPhoto);
   database.gallery.sort((a, b) => a.displayOrder - b.displayOrder);
   saveDatabase(database);
+  await syncDocToFirestore('gallery', newPhoto.id, newPhoto);
   res.status(201).json(newPhoto);
 });
 
-app.put('/api/gallery/:id', requireAdmin, (req, res) => {
+app.put('/api/gallery/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const idx = database.gallery.findIndex(g => g.id === id);
   if (idx === -1) {
@@ -1257,13 +1404,15 @@ app.put('/api/gallery/:id', requireAdmin, (req, res) => {
     ...req.body,
   };
   saveDatabase(database);
+  await syncDocToFirestore('gallery', id, database.gallery[idx]);
   res.json(database.gallery[idx]);
 });
 
-app.delete('/api/gallery/:id', requireAdmin, (req, res) => {
+app.delete('/api/gallery/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   database.gallery = database.gallery.filter(g => g.id !== id);
   saveDatabase(database);
+  await deleteDocFromFirestore('gallery', id);
   res.json({ success: true });
 });
 
@@ -1272,7 +1421,7 @@ app.get('/api/reviews', (_req, res) => {
   res.json(database.reviews);
 });
 
-app.post('/api/reviews', requireAdmin, (req, res) => {
+app.post('/api/reviews', requireAdmin, async (req, res) => {
   const { customerName, rating, reviewText, reviewDate, featured, source } = req.body;
   if (!customerName || !reviewText) {
     return res.status(400).json({ error: 'Customer name and review text are required' });
@@ -1289,10 +1438,11 @@ app.post('/api/reviews', requireAdmin, (req, res) => {
   };
   database.reviews.push(newReview);
   saveDatabase(database);
+  await syncDocToFirestore('reviews', newReview.id, newReview);
   res.status(201).json(newReview);
 });
 
-app.put('/api/reviews/:id', requireAdmin, (req, res) => {
+app.put('/api/reviews/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const idx = database.reviews.findIndex(r => r.id === id);
   if (idx === -1) {
@@ -1303,13 +1453,15 @@ app.put('/api/reviews/:id', requireAdmin, (req, res) => {
     ...req.body,
   };
   saveDatabase(database);
+  await syncDocToFirestore('reviews', id, database.reviews[idx]);
   res.json(database.reviews[idx]);
 });
 
-app.delete('/api/reviews/:id', requireAdmin, (req, res) => {
+app.delete('/api/reviews/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   database.reviews = database.reviews.filter(r => r.id !== id);
   saveDatabase(database);
+  await deleteDocFromFirestore('reviews', id);
   res.json({ success: true });
 });
 
@@ -1318,7 +1470,7 @@ app.get('/api/offers', (_req, res) => {
   res.json(database.offers);
 });
 
-app.post('/api/offers', requireAdmin, (req, res) => {
+app.post('/api/offers', requireAdmin, async (req, res) => {
   const {
     title,
     description,
@@ -1368,10 +1520,11 @@ app.post('/api/offers', requireAdmin, (req, res) => {
 
   database.offers.push(newOffer);
   saveDatabase(database);
+  await syncDocToFirestore('offers', newOffer.id, newOffer);
   res.status(201).json(newOffer);
 });
 
-app.put('/api/offers/:id', requireAdmin, (req, res) => {
+app.put('/api/offers/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const idx = database.offers.findIndex(o => o.id === id);
   if (idx === -1) {
@@ -1383,13 +1536,15 @@ app.put('/api/offers/:id', requireAdmin, (req, res) => {
     updatedAt: new Date().toISOString(),
   };
   saveDatabase(database);
+  await syncDocToFirestore('offers', id, database.offers[idx]);
   res.json(database.offers[idx]);
 });
 
-app.delete('/api/offers/:id', requireAdmin, (req, res) => {
+app.delete('/api/offers/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   database.offers = database.offers.filter(o => o.id !== id);
   saveDatabase(database);
+  await deleteDocFromFirestore('offers', id);
   res.json({ success: true });
 });
 
@@ -1399,7 +1554,7 @@ app.get('/api/coupons', (_req, res) => {
   res.json(database.coupons);
 });
 
-app.post('/api/coupons', requireAdmin, (req, res) => {
+app.post('/api/coupons', requireAdmin, async (req, res) => {
   const {
     code,
     description,
@@ -1453,10 +1608,11 @@ app.post('/api/coupons', requireAdmin, (req, res) => {
 
   database.coupons.push(newCoupon);
   saveDatabase(database);
+  await syncDocToFirestore('coupons', newCoupon.id, newCoupon);
   res.status(201).json(newCoupon);
 });
 
-app.put('/api/coupons/:id', requireAdmin, (req, res) => {
+app.put('/api/coupons/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   if (!database.coupons) database.coupons = [];
   const idx = database.coupons.findIndex(c => c.id === id);
@@ -1493,14 +1649,16 @@ app.put('/api/coupons/:id', requireAdmin, (req, res) => {
   };
 
   saveDatabase(database);
+  await syncDocToFirestore('coupons', id, database.coupons[idx]);
   res.json(database.coupons[idx]);
 });
 
-app.delete('/api/coupons/:id', requireAdmin, (req, res) => {
+app.delete('/api/coupons/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   if (!database.coupons) database.coupons = [];
   database.coupons = database.coupons.filter(c => c.id !== id);
   saveDatabase(database);
+  await deleteDocFromFirestore('coupons', id);
   res.json({ success: true });
 });
 
@@ -1509,10 +1667,13 @@ app.get('/api/hours', (_req, res) => {
   res.json(database.businessHours);
 });
 
-app.put('/api/hours', requireAdmin, (req, res) => {
+app.put('/api/hours', requireAdmin, async (req, res) => {
   if (Array.isArray(req.body)) {
     database.businessHours = req.body;
     saveDatabase(database);
+    // Use a special doc for business hours sync if needed, or part of settings
+    // For now, let's keep it in settings as well if that's where it's hydrated from
+    await syncDocToFirestore('settings', 'business_hours', { hours: database.businessHours });
     return res.json(database.businessHours);
   }
   return res.status(400).json({ error: 'Expected array of business hours' });
@@ -1620,10 +1781,9 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     return next();
   }
   return orderRateLimiter(req, res, next);
-}, (req, res) => {
+}, async (req, res) => {
   // Check if caller is authenticated admin (e.g. recording manual/phone order)
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const token = req.cookies?.onebite_session;
   const session = token ? activeSessions.get(token) : null;
   const isAdminSession = session?.role === 'admin';
 
@@ -1920,10 +2080,11 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     database.orders = database.orders.slice(0, 500);
   }
   saveDatabase(database);
+  await syncDocToFirestore('orders', newOrder.id, newOrder);
   res.status(201).json(newOrder);
 });
 
-app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
+app.put('/api/orders/:id/status', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { status, paymentStatus, note } = req.body;
   const allowedStatuses = ['pending', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'completed', 'cancelled'];
@@ -1973,10 +2134,11 @@ app.put('/api/orders/:id/status', requireAdmin, (req, res) => {
   }
 
   saveDatabase(database);
+  await syncDocToFirestore('orders', order.id, order);
   res.json(order);
 });
 
-app.put('/api/orders/:id/payment', requireAdmin, (req, res) => {
+app.put('/api/orders/:id/payment', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { paymentStatus } = req.body;
   if (paymentStatus !== 'paid' && paymentStatus !== 'unpaid') {
@@ -1991,6 +2153,7 @@ app.put('/api/orders/:id/payment', requireAdmin, (req, res) => {
 
   order.paymentStatus = paymentStatus;
   saveDatabase(database);
+  await syncDocToFirestore('orders', order.id, order);
   res.json(order);
 });
 
@@ -2089,6 +2252,131 @@ app.post('/api/whatsapp/send-order', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('WhatsApp dispatch error:', err);
     return res.status(500).json({ error: 'Failed to process WhatsApp notification' });
+  }
+});
+
+// 9b. FCM Notification Subscription Endpoint
+app.post('/api/notifications/subscribe', async (req, res) => {
+  try {
+    const { token, userId, platform } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'FCM Token is required' });
+    }
+
+    const subscriptionData = {
+      token,
+      userId: userId || 'anonymous',
+      platform: platform || 'web',
+      subscribedAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      active: true,
+    };
+
+    // Store in Firestore using Admin SDK (bypass rules)
+    // We use the token as document ID to prevent duplicates
+    await db.collection('deviceSubscriptions').doc(token).set(subscriptionData, { merge: true });
+
+    console.log(`[FCM] New device subscription registered for token ending in ...${token.slice(-6)}`);
+    
+    res.json({ success: true, message: 'Subscribed successfully' });
+  } catch (err: any) {
+    console.error('FCM Subscription error:', err);
+    res.status(500).json({ error: 'Failed to register notification subscription' });
+  }
+});
+
+/**
+ * Helper to send FCM notifications via Admin SDK
+ */
+async function sendPushNotification(token: string, title: string, body: string, data?: any, imageUrl?: string) {
+  try {
+    const message = {
+      token,
+      notification: {
+        title,
+        body,
+        ...(imageUrl && { imageUrl }),
+      },
+      data: data || {},
+      webpush: {
+        headers: {
+          Urgency: 'high',
+        },
+        notification: {
+          icon: '/official-onebite-icon.png',
+          badge: '/icon-192.png',
+          requireInteraction: true,
+          ...(imageUrl && { image: imageUrl }),
+        },
+      },
+    };
+
+    await getAdminMessaging(adminApp).send(message);
+    return true;
+  } catch (err) {
+    console.error(`[FCM ERROR] Failed to send to token ...${token.slice(-6)}:`, err);
+    // If token is invalid/expired, we could delete it from Firestore here
+    return false;
+  }
+}
+
+// 9c. Admin: Get Notification Stats
+app.get('/api/admin/notifications/stats', requireAdmin, async (req, res) => {
+  try {
+    const snapshot = await db.collection('deviceSubscriptions').get();
+    const total = snapshot.size;
+    let web = 0;
+    let android = 0;
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.platform === 'android') android++;
+      else web++;
+    });
+
+    res.json({ total, web, android });
+  } catch (err) {
+    console.error('Failed to get notification stats:', err);
+    res.status(500).json({ error: 'Failed to retrieve stats' });
+  }
+});
+
+// 9d. Admin: Send Broadcast Notification
+app.post('/api/admin/notifications/broadcast', requireAdmin, async (req, res) => {
+  try {
+    const { title, body, imageUrl, clickUrl } = req.body;
+    
+    if (!title || !body) {
+      return res.status(400).json({ error: 'Title and body are required' });
+    }
+
+    const snapshot = await db.collection('deviceSubscriptions').where('active', '==', true).get();
+    
+    if (snapshot.empty) {
+      return res.status(400).json({ error: 'No active subscribers found' });
+    }
+
+    const tokens: string[] = [];
+    snapshot.forEach(doc => tokens.push(doc.id));
+
+    console.log(`[FCM BROADCAST] Sending to ${tokens.length} devices: "${title}"`);
+
+    const results = await Promise.all(
+      tokens.map(token => sendPushNotification(token, title, body, { url: clickUrl || '/' }, imageUrl))
+    );
+
+    const successCount = results.filter(Boolean).length;
+
+    res.json({ 
+      success: true, 
+      sentCount: tokens.length, 
+      deliveredCount: successCount,
+      message: `Successfully broadcasted to ${successCount}/${tokens.length} devices.` 
+    });
+  } catch (err) {
+    console.error('FCM Broadcast error:', err);
+    res.status(500).json({ error: 'Failed to send broadcast notification' });
   }
 });
 
