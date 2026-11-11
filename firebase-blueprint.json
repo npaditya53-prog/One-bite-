@@ -214,9 +214,47 @@
         "updatedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["code", "discountType", "discountValue", "minOrderAmount", "isActive"]
+    },
+    "DeviceSubscription": {
+      "title": "DeviceSubscription",
+      "description": "FCM tokens and user preferences for push notifications",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "userId": { "type": "string" },
+        "platform": { "type": "string" },
+        "subscribedAt": { "type": "string" },
+        "lastSeenAt": { "type": "string" },
+        "active": { "type": "boolean" },
+        "promotional": { "type": "boolean" }
+      },
+      "required": ["token", "userId", "active"]
+    },
+    "NotificationHistory": {
+      "title": "NotificationHistory",
+      "description": "Log of sent push notifications",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "audience": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "success": { "type": "boolean" },
+        "error": { "type": "string" }
+      },
+      "required": ["title", "body", "sentAt"]
     }
   },
   "firestore": {
+    "/deviceSubscriptions/{token}": {
+      "schema": { "$ref": "#/entities/DeviceSubscription" },
+      "description": "User device FCM tokens"
+    },
+    "/notificationHistory/{historyId}": {
+      "schema": { "$ref": "#/entities/NotificationHistory" },
+      "description": "Sent notification logs"
+    },
     "/settings/{settingId}": {
       "schema": { "$ref": "#/entities/SiteSettings" },
       "description": "Restaurant configuration and branding data"

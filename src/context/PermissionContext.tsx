@@ -19,6 +19,8 @@ interface PermissionContextType {
   activePermissionRequest: keyof PermissionState | null;
   openPermissionModal: (type: keyof PermissionState) => void;
   closePermissionModal: () => void;
+  isPromotionalSubscribed: boolean;
+  updatePromotionalPreference: (enabled: boolean) => Promise<void>;
 }
 
 const PermissionContext = createContext<PermissionContextType | undefined>(undefined);
@@ -34,6 +36,36 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activePermissionRequest, setActivePermissionRequest] = useState<keyof PermissionState | null>(null);
+  const [isPromotionalSubscribed, setIsPromotionalSubscribed] = useState(() => {
+    return localStorage.getItem('onebite_promotional_notifications') !== 'false';
+  });
+
+  const updatePromotionalPreference = async (enabled: boolean) => {
+    setIsPromotionalSubscribed(enabled);
+    localStorage.setItem('onebite_promotional_notifications', String(enabled));
+    
+    // If notifications are granted, update the server
+    if (permissions.notifications === 'granted' && messaging) {
+      try {
+        const token = await getToken(messaging, { 
+          vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY || undefined 
+        });
+        if (token) {
+          await fetch('/api/notifications/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              token, 
+              platform: 'web',
+              promotional: enabled
+            }),
+          });
+        }
+      } catch (err) {
+        console.error('[FCM] Error updating promotional preference:', err);
+      }
+    }
+  };
 
   const checkPermissions = useCallback(async () => {
     const newState: PermissionState = { ...permissions };
@@ -100,7 +132,8 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 body: JSON.stringify({ 
                   token, 
                   platform: 'web',
-                  // We could pass userId if user is logged in
+                  promotional: isPromotionalSubscribed,
+                  userId: localStorage.getItem('onebite_customer_uid') || undefined
                 }),
               });
               console.log('[FCM] Token registered successfully');
@@ -181,6 +214,8 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         activePermissionRequest,
         openPermissionModal,
         closePermissionModal,
+        isPromotionalSubscribed,
+        updatePromotionalPreference,
       }}
     >
       {children}

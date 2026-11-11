@@ -18,11 +18,8 @@ dotenv.config();
 const adminApp = initializeAdminApp({
   projectId: firebaseConfig.projectId,
 });
-const db = getAdminFirestore(adminApp);
-// Admin Firestore might need the databaseId explicitly if it's not default
-if (firebaseConfig.firestoreDatabaseId) {
-  // In firebase-admin, you set databaseId in the getFirestore call or via env
-}
+// CRITICAL: Must use the specific firestoreDatabaseId for this applet
+const db = getAdminFirestore(adminApp, firebaseConfig.firestoreDatabaseId);
 
 const app = express();
 app.use(cookieParser());
@@ -159,7 +156,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
   next();
 });
 
@@ -2081,6 +2078,10 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
   }
   saveDatabase(database);
   await syncDocToFirestore('orders', newOrder.id, newOrder);
+  
+  // TRIGGER NOTIFICATION: Order Placed
+  notifyOrderStatusChange(newOrder);
+  
   res.status(201).json(newOrder);
 });
 
@@ -2135,6 +2136,10 @@ app.put('/api/orders/:id/status', requireAdmin, async (req, res) => {
 
   saveDatabase(database);
   await syncDocToFirestore('orders', order.id, order);
+  
+  // TRIGGER NOTIFICATION: Status Update
+  notifyOrderStatusChange(order);
+  
   res.json(order);
 });
 
@@ -2258,7 +2263,7 @@ app.post('/api/whatsapp/send-order', async (req: Request, res: Response) => {
 // 9b. FCM Notification Subscription Endpoint
 app.post('/api/notifications/subscribe', async (req, res) => {
   try {
-    const { token, userId, platform } = req.body;
+    const { token, userId, platform, promotional } = req.body;
     
     if (!token) {
       return res.status(400).json({ error: 'FCM Token is required' });
@@ -2271,13 +2276,13 @@ app.post('/api/notifications/subscribe', async (req, res) => {
       subscribedAt: new Date().toISOString(),
       lastSeenAt: new Date().toISOString(),
       active: true,
+      promotional: promotional !== undefined ? Boolean(promotional) : true,
     };
 
     // Store in Firestore using Admin SDK (bypass rules)
-    // We use the token as document ID to prevent duplicates
     await db.collection('deviceSubscriptions').doc(token).set(subscriptionData, { merge: true });
 
-    console.log(`[FCM] New device subscription registered for token ending in ...${token.slice(-6)}`);
+    console.log(`[FCM] Subscription updated for token ...${token.slice(-6)} (Promotional: ${subscriptionData.promotional})`);
     
     res.json({ success: true, message: 'Subscribed successfully' });
   } catch (err: any) {
@@ -2345,38 +2350,99 @@ app.get('/api/admin/notifications/stats', requireAdmin, async (req, res) => {
 // 9d. Admin: Send Broadcast Notification
 app.post('/api/admin/notifications/broadcast', requireAdmin, async (req, res) => {
   try {
-    const { title, body, imageUrl, clickUrl } = req.body;
+    const { title, body, imageUrl, clickUrl, audience } = req.body;
     
     if (!title || !body) {
       return res.status(400).json({ error: 'Title and body are required' });
     }
 
-    const snapshot = await db.collection('deviceSubscriptions').where('active', '==', true).get();
+    let query = db.collection('deviceSubscriptions').where('active', '==', true);
+    
+    // Filter by audience if specified
+    if (audience === 'promotional') {
+      query = query.where('promotional', '==', true);
+    } else if (audience && audience !== 'all') {
+      // Could support specific userId/email here
+      query = query.where('userId', '==', audience);
+    }
+
+    const snapshot = await query.get();
     
     if (snapshot.empty) {
-      return res.status(400).json({ error: 'No active subscribers found' });
+      return res.status(400).json({ error: 'No active subscribers found for this audience' });
     }
 
     const tokens: string[] = [];
     snapshot.forEach(doc => tokens.push(doc.id));
 
-    console.log(`[FCM BROADCAST] Sending to ${tokens.length} devices: "${title}"`);
+    console.log(`[FCM BROADCAST] Sending to ${tokens.length} devices (Audience: ${audience || 'all'}): "${title}"`);
 
     const results = await Promise.all(
       tokens.map(token => sendPushNotification(token, title, body, { url: clickUrl || '/' }, imageUrl))
     );
 
     const successCount = results.filter(Boolean).length;
+    const failureCount = tokens.length - successCount;
+
+    // Record in History
+    const historyItem = {
+      id: 'notif_' + Date.now(),
+      title,
+      body,
+      imageUrl: imageUrl || null,
+      clickUrl: clickUrl || '/',
+      audience: audience || 'all',
+      sentAt: new Date().toISOString(),
+      attemptedCount: tokens.length,
+      successCount,
+      failureCount,
+      status: successCount > 0 ? 'sent' : 'failed',
+    };
+
+    await db.collection('notificationHistory').doc(historyItem.id).set(historyItem);
 
     res.json({ 
       success: true, 
       sentCount: tokens.length, 
       deliveredCount: successCount,
+      historyItem,
       message: `Successfully broadcasted to ${successCount}/${tokens.length} devices.` 
     });
   } catch (err) {
     console.error('FCM Broadcast error:', err);
     res.status(500).json({ error: 'Failed to send broadcast notification' });
+  }
+});
+
+// 9e. Admin: Get Notification History
+app.get('/api/admin/notifications/history', requireAdmin, async (req, res) => {
+  try {
+    const snapshot = await db.collection('notificationHistory').orderBy('sentAt', 'desc').limit(50).get();
+    const history: any[] = [];
+    snapshot.forEach(doc => history.push(doc.data()));
+    res.json(history);
+  } catch (err) {
+    console.error('Failed to get notification history:', err);
+    res.status(500).json({ error: 'Failed to retrieve history' });
+  }
+});
+
+// 9f. Admin: Send Test Notification
+app.post('/api/admin/notifications/test', requireAdmin, async (req, res) => {
+  try {
+    const { token, title, body } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+    
+    const success = await sendPushNotification(
+      token, 
+      title || 'Test Notification', 
+      body || 'This is a test notification from One Bite Admin.'
+    );
+
+    if (success) res.json({ success: true });
+    else res.status(500).json({ error: 'Failed to send test notification' });
+  } catch (err) {
+    res.status(500).json({ error: 'Test notification error' });
   }
 });
 

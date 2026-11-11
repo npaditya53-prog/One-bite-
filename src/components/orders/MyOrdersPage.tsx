@@ -243,6 +243,7 @@ export function MyOrdersPage({ onBackToMenu, onNavigateHome }: MyOrdersPageProps
               description="Search menu with your voice" 
               icon={Mic}
             />
+            <PromotionalToggle />
           </div>
         </div>
 
@@ -438,7 +439,42 @@ interface PermissionToggleProps {
   icon: React.ElementType;
 }
 
+function PromotionalToggle() {
+  const { isPromotionalSubscribed, updatePromotionalPreference, permissions } = usePermissions();
+  const isEnabled = isPromotionalSubscribed && permissions.notifications === 'granted';
+
+  return (
+    <div className="flex items-center justify-between p-3 sm:p-4 rounded-2xl bg-stone-900 border border-stone-800 hover:border-stone-700 transition-all group">
+      <div className="flex items-center gap-3">
+        <div className={`p-2.5 rounded-xl ${isEnabled ? 'bg-amber-500/10' : 'bg-stone-800'} group-hover:scale-110 transition-transform`}>
+          <Bell className={`w-4 h-4 ${isEnabled ? 'text-amber-500' : 'text-stone-500'}`} />
+        </div>
+        <div className="space-y-0.5">
+          <h4 className="text-xs font-bold text-white">Promotional Updates</h4>
+          <p className="text-[10px] text-stone-500 font-medium leading-tight">Get special offers & new menu alerts</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={permissions.notifications !== 'granted'}
+        onClick={() => updatePromotionalPreference(!isPromotionalSubscribed)}
+        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-stone-900
+          ${permissions.notifications !== 'granted' ? 'bg-stone-800 cursor-not-allowed opacity-50' : isPromotionalSubscribed ? 'bg-amber-600' : 'bg-stone-700'}
+        `}
+      >
+        <span
+          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform
+            ${isPromotionalSubscribed ? 'translate-x-5' : 'translate-x-1'}
+          `}
+        />
+      </button>
+    </div>
+  );
+}
+
 function PermissionToggle({ type, label, description, icon: Icon }: PermissionToggleProps) {
+
   const { permissions, openPermissionModal } = usePermissions();
   const status = permissions[type];
 

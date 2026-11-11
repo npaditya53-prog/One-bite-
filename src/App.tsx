@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RestaurantProvider, useRestaurant } from './context/RestaurantContext.tsx';
-import { ToastProvider } from './components/common/Toast.tsx';
+import { ToastProvider, useToast } from './components/common/Toast.tsx';
+import { messaging, onMessage } from './services/firebase.ts';
 import { Navbar } from './components/layout/Navbar.tsx';
 import { Hero } from './components/home/Hero.tsx';
 import { QuickActions } from './components/home/QuickActions.tsx';
@@ -108,6 +109,29 @@ function MainContent() {
     const cleanup = initGlobalButtonSound();
     return cleanup;
   }, []);
+  
+  const { showToast } = useToast();
+  
+  // Foreground Notification Listener
+  useEffect(() => {
+    if (!messaging) return;
+    
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('[FCM] Foreground message received:', payload);
+      
+      const title = payload.notification?.title || 'Notification';
+      const body = payload.notification?.body || '';
+      
+      showToast(`${title}: ${body}`, 'info');
+      
+      // Refresh data if it's an order update
+      if (payload.data?.orderId) {
+        refreshData();
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [showToast, refreshData]);
 
   // Dynamic Page Titles and Meta Descriptions
   useEffect(() => {
