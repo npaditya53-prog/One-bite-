@@ -103,6 +103,8 @@
         "outForDeliveryAt": { "type": "string", "maxLength": 100 },
         "deliveredAt": { "type": "string", "maxLength": 100 },
         "deliveredBy": { "type": "string", "maxLength": 150 },
+        "whatsappOptIn": { "type": "boolean" },
+        "whatsappMessageId": { "type": "string" },
         "updatedAt": { "type": "string", "maxLength": 100 },
         "createdAt": { "type": "string", "maxLength": 100 }
       },

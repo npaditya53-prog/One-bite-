@@ -60,6 +60,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
   const [city, setCity] = useState(settings.city || 'Motihari');
   const [pincode, setPincode] = useState(settings.pincode || '845401');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [whatsappOptIn, setWhatsappOptIn] = useState(true);
 
   React.useEffect(() => {
     if (firebaseUser?.displayName && !customerName) {
@@ -199,6 +200,7 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
         pincode: pincode.trim() || '845401',
         deliveryInstructions: deliveryInstructions.trim(),
         deliveryAddress: compositeAddress,
+        whatsappOptIn,
       });
 
       setSubmittedOrder(res.order);
@@ -765,6 +767,27 @@ export function CheckoutPage({ onNavigate }: CheckoutPageProps) {
                       )}
                     </button>
                     <span>I understand that I must send the order through WhatsApp and wait for restaurant confirmation.</span>
+                  </label>
+
+                  <label className="flex items-start gap-3 cursor-pointer pt-3 border-t border-stone-200">
+                    <button
+                      type="button"
+                      onClick={() => setWhatsappOptIn(!whatsappOptIn)}
+                      className="mt-0.5 text-stone-700 shrink-0 cursor-pointer"
+                      aria-label="Opt-in for WhatsApp notifications"
+                    >
+                      {whatsappOptIn ? (
+                        <CheckSquare className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Square className="w-4 h-4 text-stone-400" />
+                      )}
+                    </button>
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-stone-900 text-xs sm:text-sm">Get Order Updates on WhatsApp (Recommended)</span>
+                      <p className="text-[10px] sm:text-[11px] text-stone-500 leading-tight">
+                        Receive real-time status updates (Confirmed, Out for Delivery, etc.) directly on your WhatsApp number. We never send spam.
+                      </p>
+                    </div>
                   </label>
                 </div>
 

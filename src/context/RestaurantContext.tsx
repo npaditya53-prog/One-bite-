@@ -118,6 +118,7 @@ interface RestaurantContextType {
     deliveryAddress?: string;
     tableNumber?: string;
     notes?: string;
+    whatsappOptIn?: boolean;
   }) => Promise<{ success: boolean; whatsappUrl: string; order: CustomerOrder }>;
 
   // Customer Orders & Account
@@ -148,6 +149,8 @@ interface RestaurantContextType {
   saveMenuItem: (item: Partial<MenuItem>) => Promise<MenuItem>;
   deleteMenuItem: (id: string) => Promise<void>;
   duplicateMenuItem: (id: string) => Promise<MenuItem>;
+  getWhatsAppStatus: () => Promise<any>;
+  sendWhatsAppTestMessage: (phone: string) => Promise<any>;
   saveGalleryItem: (photo: Partial<GalleryItem>) => Promise<GalleryItem>;
   deleteGalleryItem: (id: string) => Promise<void>;
   saveReview: (review: Partial<ReviewItem>) => Promise<ReviewItem>;
@@ -721,6 +724,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       deliveryAddress?: string;
       tableNumber?: string;
       notes?: string;
+      whatsappOptIn?: boolean;
     }) => {
       if (isPlacingOrderRef.current) {
         throw new Error('Your order is already being processed. Please wait a moment.');
@@ -793,6 +797,7 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         totalAmount: finalTotal,
         paymentMethod: 'pay_on_delivery',
         paymentStatus: 'unpaid',
+        whatsappOptIn: customer.whatsappOptIn,
         status: 'pending',
       };
 
@@ -1097,6 +1102,13 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
       throw apiErr;
     }
   };
+  const getWhatsAppStatus = async () => {
+    return await api.getWhatsAppStatus();
+  };
+
+  const sendWhatsAppTestMessage = async (phone: string) => {
+    return await api.sendWhatsAppTestMessage(phone);
+  };
 
   const handleSaveGalleryItem = async (photoData: Partial<GalleryItem>) => {
     const saved = await api.saveGalleryItem(photoData);
@@ -1367,6 +1379,8 @@ export function RestaurantProvider({ children }: { children: React.ReactNode }) 
         saveMenuItem: handleSaveMenuItem,
         deleteMenuItem: handleDeleteMenuItem,
         duplicateMenuItem: handleDuplicateMenuItem,
+        getWhatsAppStatus,
+        sendWhatsAppTestMessage,
         saveGalleryItem: handleSaveGalleryItem,
         deleteGalleryItem: handleDeleteGalleryItem,
         saveReview: handleSaveReview,

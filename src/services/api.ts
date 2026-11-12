@@ -652,6 +652,30 @@ export const api = {
     }
   },
 
+  async getWhatsAppStatus(): Promise<any> {
+    const res = await fetch('/api/admin/whatsapp/status', {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch WhatsApp status');
+    return await res.json();
+  },
+
+  async sendWhatsAppTestMessage(phone: string): Promise<any> {
+    const res = await fetch('/api/admin/whatsapp/test', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ phone }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Failed to send test message');
+    }
+    return await res.json();
+  },
+
   // Delivery Boy API Methods
   async deliveryLogin(identifier: string, pass: string): Promise<{ success: boolean; user: { identifier: string; role: string } }> {
     const res = await fetch('/api/delivery/login', {

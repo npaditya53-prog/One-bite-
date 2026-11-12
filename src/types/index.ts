@@ -141,6 +141,8 @@ export interface CustomerOrder {
   paymentStatus?: 'unpaid' | 'paid';
   customerUid?: string;
   customerEmail?: string;
+  whatsappOptIn?: boolean;
+  whatsappMessageId?: string;
   status: OrderStatus;
   statusHistory?: StatusHistoryItem[];
   deliveryStatus?: 'Delivered' | 'Pending' | 'Out for Delivery' | 'Assigned' | 'Packed' | string;

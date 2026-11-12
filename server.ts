@@ -1050,8 +1050,9 @@ app.put('/api/orders/:id/assign', requireAdmin, async (req, res) => {
   saveDatabase(database);
   await syncDocToFirestore('orders', order.id, order);
   
-  // TRIGGER NOTIFICATION
+  // TRIGGER NOTIFICATIONS
   notifyOrderStatusChange(order);
+  notifyWhatsAppOrderUpdate(order);
   
   res.json(order);
 });
@@ -1103,8 +1104,9 @@ app.put('/api/delivery/orders/:id/start', requireDeliveryOrAdmin, async (req, re
   saveDatabase(database);
   await syncDocToFirestore('orders', order.id, order);
   
-  // TRIGGER NOTIFICATION
+  // TRIGGER NOTIFICATIONS
   notifyOrderStatusChange(order);
+  notifyWhatsAppOrderUpdate(order);
   
   res.json(order);
 });
@@ -1138,8 +1140,9 @@ app.put('/api/delivery/orders/:id/deliver', requireDeliveryOrAdmin, async (req, 
   saveDatabase(database);
   await syncDocToFirestore('orders', order.id, order);
   
-  // TRIGGER NOTIFICATION
+  // TRIGGER NOTIFICATIONS
   notifyOrderStatusChange(order);
+  notifyWhatsAppOrderUpdate(order);
   
   res.json(order);
 });
@@ -1815,6 +1818,7 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     items,
     appliedOfferTitle,
     appliedCouponCode,
+    whatsappOptIn,
     isDryRun,
   } = req.body;
 
@@ -2026,6 +2030,7 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
     customerPhone: cleanPhone,
     customerUid: customerUid ? sanitizeText(customerUid, 128) : undefined,
     customerEmail: customerEmail ? sanitizeText(customerEmail, 150) : undefined,
+    whatsappOptIn: Boolean(whatsappOptIn),
     orderType: orderType === 'takeaway' || orderType === 'dine_in' ? orderType : 'delivery',
     houseFlat: sanitizeText(houseFlat, 100),
     streetArea: sanitizeText(streetArea, 200),
@@ -2079,8 +2084,9 @@ app.post('/api/orders', (req: Request, res: Response, next: NextFunction) => {
   saveDatabase(database);
   await syncDocToFirestore('orders', newOrder.id, newOrder);
   
-  // TRIGGER NOTIFICATION: Order Placed
+  // TRIGGER NOTIFICATIONS: Order Placed
   notifyOrderStatusChange(newOrder);
+  notifyWhatsAppOrderUpdate(newOrder);
   
   res.status(201).json(newOrder);
 });
@@ -2137,8 +2143,9 @@ app.put('/api/orders/:id/status', requireAdmin, async (req, res) => {
   saveDatabase(database);
   await syncDocToFirestore('orders', order.id, order);
   
-  // TRIGGER NOTIFICATION: Status Update
+  // TRIGGER NOTIFICATIONS: Status Update
   notifyOrderStatusChange(order);
+  notifyWhatsAppOrderUpdate(order);
   
   res.json(order);
 });
@@ -2443,6 +2450,167 @@ app.post('/api/admin/notifications/test', requireAdmin, async (req, res) => {
     else res.status(500).json({ error: 'Failed to send test notification' });
   } catch (err) {
     res.status(500).json({ error: 'Test notification error' });
+  }
+});
+
+// --- 9.5 WhatsApp Business Cloud API Integration ---
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_APP_SECRET = process.env.WHATSAPP_APP_SECRET;
+
+/**
+ * Generic helper to send WhatsApp template messages via Meta Graph API
+ */
+async function sendWhatsAppTemplateMessage(to: string, templateName: string, languageCode: string, components: any[] = []) {
+  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+    console.warn('[WhatsApp] Credentials missing, skipping template message:', templateName);
+    return null;
+  }
+
+  // Normalize phone number (remove +, spaces, ensure country code)
+  let cleanTo = to.replace(/[^0-9]/g, '');
+  if (cleanTo.length === 10) cleanTo = '91' + cleanTo;
+
+  try {
+    const url = `https://graph.facebook.com/v20.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: cleanTo,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: languageCode },
+          components: components.length > 0 ? components : undefined,
+        },
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('[WhatsApp API Error]', JSON.stringify(data, null, 2));
+      return null;
+    }
+
+    console.log(`[WhatsApp] Template message "${templateName}" sent to ${cleanTo}. ID: ${data.messages?.[0]?.id}`);
+    return data.messages?.[0]?.id;
+  } catch (err) {
+    console.error('[WhatsApp] Fetch error:', err);
+    return null;
+  }
+}
+
+/**
+ * High-level helper to notify customer about order via WhatsApp
+ */
+async function notifyWhatsAppOrderUpdate(order: CustomerOrder) {
+  if (!order.whatsappOptIn || !order.customerPhone) return;
+
+  const orderIdShort = order.id.slice(-6).toUpperCase();
+  const trackingUrl = `https://one-bite-eta.vercel.app/my-orders?id=${order.id}`;
+
+  const statusMap: Record<string, string> = {
+    pending: 'Received',
+    confirmed: 'Confirmed',
+    preparing: 'Being Prepared',
+    packed: 'Packed',
+    out_for_delivery: 'Out for Delivery',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled',
+  };
+
+  const statusText = statusMap[order.status] || order.status;
+
+  // Use 'order_status_update' template
+  // Parameters: 1: Name, 2: OrderID, 3: Status, 4: TrackingURL
+  const components = [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: order.customerName },
+        { type: 'text', text: orderIdShort },
+        { type: 'text', text: statusText },
+        { type: 'text', text: trackingUrl },
+      ],
+    }
+  ];
+
+  await sendWhatsAppTemplateMessage(order.customerPhone, 'order_status_update', 'en_US', components);
+}
+
+// Webhook Verification (GET)
+app.get('/api/webhooks/whatsapp', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode && token) {
+    if (mode === 'subscribe' && token === WHATSAPP_VERIFY_TOKEN) {
+      console.log('[WhatsApp Webhook] Verified successfully.');
+      return res.status(200).send(challenge);
+    }
+  }
+  return res.sendStatus(403);
+});
+
+// Webhook Event Handling (POST)
+app.post('/api/webhooks/whatsapp', (req, res) => {
+  const signature = req.headers['x-hub-signature-256'] as string;
+  
+  // Optional Signature Verification
+  if (WHATSAPP_APP_SECRET && signature) {
+    const hmac = crypto.createHmac('sha256', WHATSAPP_APP_SECRET);
+    const digest = 'sha256=' + hmac.update(JSON.stringify(req.body)).digest('hex');
+    if (signature !== digest) {
+      console.error('[WhatsApp Webhook] Signature mismatch');
+      return res.sendStatus(401);
+    }
+  }
+
+  const body = req.body;
+  if (body.object) {
+    if (body.entry?.[0]?.changes?.[0]?.value?.messages) {
+      console.log('[WhatsApp Webhook] Incoming message received');
+    }
+    
+    if (body.entry?.[0]?.changes?.[0]?.value?.statuses) {
+      console.log('[WhatsApp Webhook] Status update received');
+    }
+
+    return res.status(200).send('EVENT_RECEIVED');
+  }
+  
+  return res.sendStatus(404);
+});
+
+// Admin WhatsApp Dashboard Endpoints
+app.get('/api/admin/whatsapp/status', requireAdmin, (req, res) => {
+  res.json({
+    configured: Boolean(WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID && WHATSAPP_BUSINESS_ACCOUNT_ID),
+    phoneNumberId: WHATSAPP_PHONE_NUMBER_ID ? `...${WHATSAPP_PHONE_NUMBER_ID.slice(-4)}` : null,
+    businessAccountId: WHATSAPP_BUSINESS_ACCOUNT_ID ? `...${WHATSAPP_BUSINESS_ACCOUNT_ID.slice(-4)}` : null,
+    webhookVerified: true, // Placeholder for actual verification check
+  });
+});
+
+app.post('/api/admin/whatsapp/test', requireAdmin, async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+
+  // Use standard hello_world template for testing
+  const messageId = await sendWhatsAppTemplateMessage(phone, 'hello_world', 'en_US');
+  
+  if (messageId) {
+    res.json({ success: true, messageId });
+  } else {
+    res.status(500).json({ error: 'Failed to send test message. Ensure "hello_world" template is active.' });
   }
 });
 
